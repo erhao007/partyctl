@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>partyctl</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="login-view" class="login-wrap hidden">
+    <form id="login-form" class="card login-card">
+      <h1>partyctl</h1>
+      <p class="muted">输入访问令牌（控制器 secret 或 web.token）</p>
+      <input id="login-token" type="password" placeholder="Token" autocomplete="current-password" required />
+      <button type="submit">登录</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">◆</span>
+        <strong>partyctl</strong>
+        <span id="run-badge" class="badge">检测中</span>
+      </div>
+      <div class="top-actions">
+        <span id="traffic" class="traffic muted">↑ — / ↓ —</span>
+        <button data-core="start" class="btn">启动</button>
+        <button data-core="stop" class="btn btn-ghost">停止</button>
+        <button data-core="restart" class="btn btn-ghost">重启</button>
+        <button id="logout" class="btn btn-ghost">退出</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="overview">概览</button>
+      <button class="tab" data-tab="nodes">节点</button>
+      <button class="tab" data-tab="subs">订阅</button>
+      <button class="tab" data-tab="overrides">覆盖</button>
+      <button class="tab" data-tab="settings">设置</button>
+      <button class="tab" data-tab="logs">日志</button>
+    </nav>
+
+    <main>
+      <section id="tab-overview" class="panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>状态</h2>
+            <dl id="status-dl" class="kv"></dl>
+          </div>
+          <div class="card">
+            <h2>模式</h2>
+            <div class="mode-row">
+              <button class="btn mode" data-mode="rule">规则</button>
+              <button class="btn mode" data-mode="global">全局</button>
+              <button class="btn mode" data-mode="direct">直连</button>
+            </div>
+            <p class="muted tip">切换会写入设置并尝试 PATCH 内核。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-nodes" class="panel hidden">
+        <div class="card">
+          <div class="row between">
+            <h2>策略组</h2>
+            <button id="refresh-proxies" class="btn btn-ghost">刷新</button>
+          </div>
+          <div id="groups"></div>
+        </div>
+      </section>
+
+      <section id="tab-subs" class="panel hidden">
+        <div class="card">
+          <h2>订阅</h2>
+          <form id="add-sub" class="inline-form">
+            <input name="name" placeholder="名称" required />
+            <input name="url" placeholder="订阅 URL" required />
+            <button class="btn" type="submit">添加</button>
+          </form>
+          <div id="subs-list"></div>
+        </div>
+      </section>
+
+      <section id="tab-overrides" class="panel hidden">
+        <div class="card">
+          <h2>覆盖规则</h2>
+          <form id="ov-form" class="stack">
+            <div class="inline-form">
+              <input id="ov-name" placeholder="文件名，如 custom.yaml" required />
+              <button class="btn" type="submit">保存</button>
+              <button id="ov-delete" class="btn btn-danger" type="button">删除当前</button>
+            </div>
+            <textarea id="ov-content" rows="16" placeholder="# YAML 覆盖：key! 强制替换；+key 前置；key+ 追加"></textarea>
+          </form>
+          <div id="ov-list" class="chips"></div>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="panel hidden">
+        <div class="card">
+          <h2>设置</h2>
+          <form id="settings-form" class="form-grid">
+            <label>mixed-port <input name="mixed_port" type="number" /></label>
+            <label>模式
+              <select name="mode">
+                <option value="rule">rule</option>
+                <option value="global">global</option>
+                <option value="direct">direct</option>
+              </select>
+            </label>
+            <label>日志级别 <input name="log_level" /></label>
+            <label class="check"><input name="tun" type="checkbox" /> 启用 TUN</label>
+            <label class="check"><input name="allow_lan" type="checkbox" /> 允许局域网</label>
+            <label>外部控制器 <input name="external_controller" /></label>
+            <label>Web 监听 <input name="web_listen" /></label>
+            <label class="check"><input name="web_enabled" type="checkbox" /> 随核心自动启 Web（配置项）</label>
+            <div class="full"><button class="btn" type="submit">保存并重新生成配置</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="tab-logs" class="panel hidden">
+        <div class="card">
+          <div class="row between">
+            <h2>实时日志</h2>
+            <button id="clear-logs" class="btn btn-ghost">清空</button>
+          </div>
+          <pre id="log-view" class="log-view"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

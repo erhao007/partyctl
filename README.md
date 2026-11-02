@@ -1,1 +1,136 @@
 # partyctl
+
+基于 [mihomo](https://github.com/MetaCubeX/mihomo)（Clash Meta）的 Ubuntu 命令行轻量封装，灵感来自 [Clash Party](https://github.com/mihomo-party-org/clash-party)。提供 CLI 与嵌入式中文 Web 管理界面。
+
+## 依赖
+
+- Go 1.22+（构建时；使用 `net/http` 方法路由）
+- Linux amd64 / arm64
+- 可选：`systemctl --user`、`gsettings`（GNOME）、`setcap`（TUN）
+
+## 安装
+
+```bash
+# 从源码构建
+cd partyctl
+go build -o partyctl .
+sudo install -m 755 partyctl /usr/local/bin/partyctl
+
+# 或使用预编译二进制
+install -m 755 partyctl-linux-amd64 ~/.local/bin/partyctl
+```
+
+安装内核：
+
+```bash
+partyctl core install
+partyctl core version
+```
+
+## 目录布局
+
+| 路径 | 说明 |
+|------|------|
+| `~/.config/partyctl/config.yaml` | 设置：mixed-port、controller、secret、当前配置、TUN、web、overrides |
+| `~/.config/partyctl/profiles/<name>.yaml` | 订阅/本地配置内容 |
+| `~/.config/partyctl/profiles.yaml` | 配置元数据（url、updated、subscription-userinfo） |
+| `~/.config/partyctl/override/*.yaml` | 覆盖片段 |
+| `~/.config/partyctl/work/config.yaml` | 生成后的运行配置 |
+| `~/.local/share/partyctl/mihomo` | 内核二进制 |
+| `~/.config/systemd/user/partyctl.service` | 用户级 systemd 单元 |
+
+`config.yaml` 中与 Web 相关的字段示例：
+
+```yaml
+web:
+  enabled: false          # true 时 partyctl start 会尝试后台拉起 Web
+  listen: 127.0.0.1:9800  # 默认仅本机
+  token: ""               # 为空则复用 secret
+```
+
+## 快速开始
+
+```bash
+partyctl core install
+partyctl sub add mysub 'https://example.com/clash.yaml'
+partyctl sub use mysub
+partyctl generate
+partyctl start --detach --with-web
+# 浏览器打开 http://127.0.0.1:9800/ ，用 secret（或 web.token）登录
+```
+
+也可单独启动 Web：
+
+```bash
+partyctl web --listen 127.0.0.1:9800
+```
+
+### CLI 其余常用命令
+
+```bash
+partyctl mode rule
+partyctl node list
+partyctl node select PROXY '节点名'
+partyctl override add /tmp/ov.yaml
+partyctl proxy env
+partyctl tun on
+```
+
+## Web 界面
+
+- 纯 HTML/JS/CSS，经 `go:embed` 打进二进制，无前端构建步骤
+- 默认绑定 `127.0.0.1`；绑定非回环地址时会在 stderr 打印警告
+- 登录页 + `Authorization: Bearer <token>` / Cookie；token 默认等于控制器 `secret`
+- 功能：状态与启停、模式、订阅（含 subscription-userinfo 流量/到期解析）、覆盖编辑、节点选择与测速、实时流量与日志（SSE 代理内核）
+
+主要 API（均需鉴权，除 `POST /api/login`）：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/status` | 运行状态 |
+| POST | `/api/core/{start\|stop\|restart}` | 控制内核 |
+| GET/PUT | `/api/settings` | 读/写设置并 regenerate |
+| GET/POST/DELETE… | `/api/subs` | 订阅管理 |
+| GET/PUT/DELETE | `/api/overrides…` | 覆盖管理 |
+| GET/PUT | `/api/proxies…` | 节点 |
+| GET | `/api/delay/{name}` | 延迟 |
+| GET | `/api/traffic` `/api/logs` | SSE |
+
+## 命令一览
+
+| 命令 | 说明 |
+|------|------|
+| `core install [--version]` / `core version` | 下载安装 / 查看内核 |
+| `sub add/update/use/list/rm` | 订阅管理 |
+| `override add/list/rm` | 覆盖管理 |
+| `generate` | 生成配置并校验 |
+| `start/stop/restart/status` | 生命周期；`start --with-web` 可同启 Web |
+| `web [--listen]` | 嵌入式 Web UI |
+| `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
+
+## 本地最小配置示例
+
+```yaml
+# ~/.config/partyctl/profiles/local.yaml
+proxies:
+  - name: DIRECT-NODE
+    type: direct
+proxy-groups:
+  - name: PROXY
+    type: select
+    proxies: [DIRECT, DIRECT-NODE]
+rules:
+  - MATCH,PROXY
+```
+
+## 开发
+
+```bash
+go test ./...
+go vet ./...
+go build -o partyctl .
+```
+
+## 许可
+
+MVP 示例代码，按需使用。mihomo / Clash Party 遵循各自上游许可。
