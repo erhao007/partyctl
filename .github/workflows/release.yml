@@ -26,8 +26,8 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME}"
           mkdir -p dist
-          # No version variable exists in this module, so ldflags only strip the binary.
-          ldflags="-s -w"
+          # internal/version.version defaults to "dev"; the tag becomes `partyctl version`.
+          ldflags="-s -w -X github.com/partyctl/partyctl/internal/version.version=${version}"
           for arch in amd64 arm64; do
             name="partyctl-${version}-linux-${arch}"
             staging="dist/${name}"
@@ -36,8 +36,11 @@ jobs:
               go build -trimpath -ldflags "${ldflags}" -o "${staging}/partyctl" .
             cp README.md "${staging}/README.md"
             tar -C dist -czf "dist/${name}.tar.gz" "${name}"
+            # Stable name so /releases/latest/download/partyctl-linux-<arch>.tar.gz resolves.
+            cp "dist/${name}.tar.gz" "dist/partyctl-linux-${arch}.tar.gz"
             rm -rf "${staging}"
           done
+          cp install.sh dist/install.sh
           (
             cd dist
             sha256sum partyctl-*.tar.gz > SHA256SUMS
@@ -49,5 +52,6 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/install.sh
           fail_on_unmatched_files: true
           generate_release_notes: true

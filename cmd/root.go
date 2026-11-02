@@ -33,6 +33,7 @@ func init() {
 	rootCmd.AddCommand(logCmd)
 	rootCmd.AddCommand(proxyCmd)
 	rootCmd.AddCommand(tunCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func fatal(err error) {
