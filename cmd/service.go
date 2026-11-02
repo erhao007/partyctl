@@ -3,9 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
-	"syscall"
 
 	"github.com/partyctl/partyctl/internal/config"
 	"github.com/partyctl/partyctl/internal/service"
@@ -36,28 +33,16 @@ var startCmd = &cobra.Command{
 }
 
 func startWebDetached(st config.Settings) error {
-	exe, err := os.Executable()
-	if err != nil {
-		exe = "partyctl"
-	}
 	listen := st.Web.Listen
 	if listen == "" {
 		listen = "127.0.0.1:9800"
 	}
-	cmd := exec.Command(exe, "web", "--listen", listen)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	pid, err := service.StartWebDetached(listen)
+	if err != nil {
 		return err
 	}
-	url := listen
-	if !strings.Contains(url, "://") {
-		url = "http://" + url
-	}
-	fmt.Printf("Web: %s (pid=%d)\n", url, cmd.Process.Pid)
+	fmt.Printf("Web: %s (pid=%d)\n", config.WebURL(st), pid)
 	fmt.Println("登录令牌: partyctl web token")
-	_ = cmd.Process.Release()
 	return nil
 }
 

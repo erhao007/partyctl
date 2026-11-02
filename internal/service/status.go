@@ -24,6 +24,7 @@ type Report struct {
 	Controller   string
 	TUN          bool
 	WebRunning   bool
+	WebMode      string // system, user, detach; empty when stopped
 	WebURL       string
 	SettingsPath string
 	ProfilePath  string
@@ -87,8 +88,9 @@ func Collect() (Report, error) {
 		rep.RunMode = "detached"
 		rep.CorePID = p
 	}
-	if _, ok := findWebPID(); ok {
+	if pid, ok := findWebPID(); ok {
 		rep.WebRunning = true
+		rep.WebMode = webModeOf(pid)
 	}
 	return rep, nil
 }
@@ -126,6 +128,11 @@ func FormatStatus(r Report) string {
 	} else {
 		fmt.Fprintf(&b, "Web: 未运行\n")
 	}
+	webMode := r.WebMode
+	if !r.WebRunning {
+		webMode = ""
+	}
+	fmt.Fprintf(&b, "Web 运行方式: %s\n", webModeLabel(webMode))
 	fmt.Fprintf(&b, "Web 地址: %s\n", dash(r.WebURL))
 	fmt.Fprintf(&b, "设置: %s\n", dash(r.SettingsPath))
 	fmt.Fprintf(&b, "当前配置文件: %s\n", dash(r.ProfilePath))
@@ -238,18 +245,39 @@ func isCoreArgs(args []string, bin, work string) bool {
 	return false
 }
 
+// isWebServerArgs 判断命令行是不是正在提供页面的 `partyctl web`。
+// `web token`、`web url`、`web enable` 这类子命令不算。
 func isWebServerArgs(args []string) bool {
+	idx := -1
 	for i, a := range args {
-		if a != "web" {
+		if a == "web" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	rest := args[idx+1:]
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		switch a {
+		case "--listen":
+			i++
+			continue
+		case "--":
+			return false
+		}
+		if strings.HasPrefix(a, "--listen=") {
 			continue
 		}
-		if i+1 < len(args) {
-			switch args[i+1] {
-			case "token", "url", "help", "-h", "--help":
-				return false
-			}
+		if a == "-h" || a == "--help" || a == "help" {
+			return false
 		}
-		return true
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		return false
 	}
-	return false
+	return true
 }

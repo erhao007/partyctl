@@ -64,6 +64,7 @@ func TestStatusCommandFields(t *testing.T) {
 		"控制器: 127.0.0.1:9090\n",
 		"TUN: 关\n",
 		"Web: 未运行\n",
+		"Web 运行方式: -\n",
 		"Web 地址: http://127.0.0.1:9800\n",
 		"config.yaml",
 		"profiles/local.yaml",

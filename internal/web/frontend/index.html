@@ -48,6 +48,7 @@
           <div class="card">
             <h2>状态</h2>
             <dl id="status-dl" class="kv"></dl>
+            <p id="status-hint" class="muted tip"></p>
           </div>
           <div class="card">
             <h2>模式</h2>
@@ -74,6 +75,7 @@
       <section id="tab-subs" class="panel hidden">
         <div class="card">
           <h2>订阅</h2>
+          <p class="muted tip">没有订阅也可以先使用本页。添加后点「启用」切换；第一次添加会自动启用。然后用右上角「启动」运行内核。</p>
           <form id="add-sub" class="inline-form">
             <input name="name" placeholder="名称" required />
             <input name="url" placeholder="订阅 URL" required />
@@ -115,7 +117,7 @@
             <label class="check"><input name="allow_lan" type="checkbox" /> 允许局域网</label>
             <label>外部控制器 <input name="external_controller" /></label>
             <label>Web 监听 <input name="web_listen" /></label>
-            <label class="check"><input name="web_enabled" type="checkbox" /> 随核心自动启 Web（配置项）</label>
+            <label class="check"><input name="web_enabled" type="checkbox" /> 随核心再拉起一份 Web（安装后的 Web 已单独托管，一般不用勾）</label>
             <div class="full"><button class="btn" type="submit">保存并重新生成配置</button></div>
           </form>
         </div>

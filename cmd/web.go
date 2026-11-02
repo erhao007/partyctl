@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/partyctl/partyctl/internal/config"
+	"github.com/partyctl/partyctl/internal/service"
 	"github.com/partyctl/partyctl/internal/web"
 	"github.com/spf13/cobra"
 )
@@ -60,8 +61,21 @@ var webURLCmd = &cobra.Command{
 	},
 }
 
+var webEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "安装并启动 Web（systemd 开机/登录自启，否则后台运行）",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		res, err := service.EnableWeb()
+		if res.Message != "" {
+			fmt.Fprint(cmd.OutOrStdout(), res.Message)
+		}
+		fatal(err)
+	},
+}
+
 func init() {
 	webCmd.Flags().StringVar(&webListen, "listen", "", "监听地址（默认 127.0.0.1:9800 或配置 web.listen）")
-	webCmd.AddCommand(webTokenCmd, webURLCmd)
+	webCmd.AddCommand(webTokenCmd, webURLCmd, webEnableCmd)
 	rootCmd.AddCommand(webCmd)
 }

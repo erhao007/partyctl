@@ -18,7 +18,7 @@ func Generate() (string, error) {
 		return "", err
 	}
 	if s.CurrentProfile == "" {
-		return "", fmt.Errorf("no current profile; run: partyctl sub use <name>")
+		return "", fmt.Errorf("还没有订阅：请在 Web「订阅」页添加并启用，或执行 partyctl sub add / partyctl sub use")
 	}
 	profilePath := ProfilePath(s.CurrentProfile)
 	raw, err := os.ReadFile(profilePath)
@@ -112,7 +112,7 @@ func Validate(coreBin string) error {
 		coreBin = CoreBinaryPath()
 	}
 	if _, err := os.Stat(coreBin); err != nil {
-		return fmt.Errorf("mihomo binary not found at %s; run: partyctl core install", coreBin)
+		return fmt.Errorf("未找到 mihomo 内核（%s）。请执行: partyctl core install", coreBin)
 	}
 	cmd := exec.Command(coreBin, "-t", "-d", WorkDir())
 	out, err := cmd.CombinedOutput()

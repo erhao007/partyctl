@@ -17,6 +17,7 @@ func TestFormatStatusRunning(t *testing.T) {
 		Controller:   "127.0.0.1:9090",
 		TUN:          true,
 		WebRunning:   true,
+		WebMode:      webModeSystem,
 		WebURL:       "http://127.0.0.1:9800",
 		SettingsPath: "/tmp/config.yaml",
 		ProfilePath:  "/tmp/profiles/mysub.yaml",
@@ -34,6 +35,7 @@ func TestFormatStatusRunning(t *testing.T) {
 		"控制器: 127.0.0.1:9090",
 		"TUN: 开",
 		"Web: 运行中",
+		"Web 运行方式: systemd（开机自启）",
 		"Web 地址: http://127.0.0.1:9800",
 		"设置: /tmp/config.yaml",
 		"当前配置文件: /tmp/profiles/mysub.yaml",
@@ -68,6 +70,7 @@ func TestFormatStatusStopped(t *testing.T) {
 		"控制器: 127.0.0.1:9090",
 		"TUN: 关",
 		"Web: 未运行",
+		"Web 运行方式: -",
 		"Web 地址: http://127.0.0.1:9800",
 		"当前配置文件: -",
 	} {
@@ -91,6 +94,12 @@ func TestArgMatchers(t *testing.T) {
 	}
 	if isWebServerArgs([]string{"partyctl", "web", "token"}) {
 		t.Fatal("web token is not the server")
+	}
+	if isWebServerArgs([]string{"partyctl", "web", "enable"}) {
+		t.Fatal("web enable is not the server")
+	}
+	if !isWebServerArgs([]string{"/usr/local/bin/partyctl", "web", "--listen=127.0.0.1:9800"}) {
+		t.Fatal("expected --listen= form to count as the server")
 	}
 	if isWebServerArgs([]string{"partyctl", "status"}) {
 		t.Fatal("status is not web")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/partyctl/partyctl/internal/client"
 	"github.com/partyctl/partyctl/internal/config"
+	"github.com/partyctl/partyctl/internal/core"
 	"github.com/partyctl/partyctl/internal/service"
 )
 
@@ -46,11 +47,16 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	running := service.IsRunning()
-	coreVer := ""
-	if b, err := os.ReadFile(config.CoreBinaryPath()); err == nil && len(b) > 0 {
-		_ = b
+	coreInstalled := false
+	coreVersion := ""
+	if ver, err := core.Version(); err == nil {
+		coreInstalled = strings.TrimSpace(ver) != ""
+		if i := strings.IndexByte(ver, '\n'); i >= 0 {
+			ver = ver[:i]
+		}
+		coreVersion = strings.TrimSpace(ver)
 	}
-	// best-effort version via controller or binary
+	// best-effort version via controller when the core is up
 	var mihomo map[string]any
 	if c, err := client.New(); err == nil {
 		if v, err := c.Version(); err == nil {
@@ -69,8 +75,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"log_level":           st.LogLevel,
 		"web_listen":          st.Web.Listen,
 		"core_path":           config.CoreBinaryPath(),
+		"core_installed":      coreInstalled,
+		"core_version":        coreVersion,
 		"mihomo":              mihomo,
-		"core_version_hint":   coreVer,
 	})
 }
 
@@ -79,13 +86,11 @@ func (s *Server) handleCoreAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch action {
 	case "start":
-		err = service.StartDetached()
+		err = service.StartBackground()
 	case "stop":
 		err = service.Stop()
 	case "restart":
-		_ = service.Stop()
-		time.Sleep(300 * time.Millisecond)
-		err = service.StartDetached()
+		err = service.RestartBackground()
 	default:
 		writeErr(w, 400, "action must be start|stop|restart")
 		return
@@ -250,12 +255,12 @@ func (s *Server) handleListSubs(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, len(meta.Profiles))
 	for _, p := range meta.Profiles {
 		items = append(items, map[string]any{
-			"name":        p.Name,
-			"url":         p.URL,
-			"updated":     p.Updated,
-			"current":     p.Name == st.CurrentProfile,
-			"userinfo":    parseUserinfo(p.SubscriptionUserinfo),
-			"has_file":    fileExists(config.ProfilePath(p.Name)),
+			"name":     p.Name,
+			"url":      p.URL,
+			"updated":  p.Updated,
+			"current":  p.Name == st.CurrentProfile,
+			"userinfo": parseUserinfo(p.SubscriptionUserinfo),
+			"has_file": fileExists(config.ProfilePath(p.Name)),
 		})
 	}
 	writeJSON(w, 200, map[string]any{"profiles": items, "current": st.CurrentProfile})
@@ -320,14 +325,33 @@ func (s *Server) handleAddSub(w http.ResponseWriter, r *http.Request) {
 	}
 	meta.Profiles = append(meta.Profiles, config.ProfileMeta{
 		Name: body.Name, URL: body.URL,
-		Updated: time.Now().Format(time.RFC3339),
+		Updated:              time.Now().Format(time.RFC3339),
 		SubscriptionUserinfo: userinfo,
 	})
 	if err := config.SaveProfilesMeta(meta); err != nil {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "name": body.Name})
+	activated := false
+	st, err := config.LoadSettings()
+	if err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	// 第一份订阅直接启用，这样用户添加后就能启动内核。
+	if st.CurrentProfile == "" {
+		st.CurrentProfile = body.Name
+		if err := config.SaveSettings(st); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		if _, err := config.Generate(); err != nil {
+			writeErr(w, 500, "订阅已保存，但生成配置失败: "+err.Error())
+			return
+		}
+		activated = true
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "name": body.Name, "activated": activated})
 }
 
 func (s *Server) handleUpdateSub(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +414,15 @@ func (s *Server) handleUseSub(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "current": name, "config": path})
+	restarted := false
+	if service.IsRunning() {
+		if err := service.RestartBackground(); err != nil {
+			writeErr(w, 500, "已切换到 "+name+"，但重启内核失败: "+err.Error())
+			return
+		}
+		restarted = true
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "current": name, "config": path, "restarted": restarted})
 }
 
 func (s *Server) handleDeleteSub(w http.ResponseWriter, r *http.Request) {

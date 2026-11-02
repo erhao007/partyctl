@@ -46,21 +46,36 @@ async function boot() {
   // logs connect when tab opens
 }
 
+function kernelLabel(s) {
+  if (s.mihomo && (s.mihomo.version || s.mihomo.meta)) return s.mihomo.version || s.mihomo.meta;
+  if (s.core_installed) return s.core_version || '已安装';
+  return '未安装';
+}
+
+function statusHint(s) {
+  if (!s.core_installed) return '内核未安装。请在服务器执行 partyctl core install，完成后回到这里点「启动」。';
+  if (!s.current_profile) return '还没有订阅。打开「订阅」页添加并启用，然后点右上角「启动」。';
+  if (!s.running) return '内核未运行。确认订阅已启用后，点右上角「启动」。';
+  return '';
+}
+
 async function refreshStatus() {
   const s = await api('/api/status');
   const badge = $('#run-badge');
-  badge.textContent = s.running ? '运行中' : '未运行';
+  badge.textContent = s.running ? '内核运行中' : '内核未运行';
   badge.className = 'badge ' + (s.running ? 'on' : 'off');
-  const ver = s.mihomo && (s.mihomo.version || s.mihomo.meta) || '—';
   $('#status-dl').innerHTML = [
-    ['运行', s.running ? '是' : '否'],
+    ['内核状态', s.running ? '运行中' : '未运行'],
     ['当前配置', s.current_profile || '—'],
     ['模式', s.mode],
     ['mixed-port', s.mixed_port],
     ['控制器', s.external_controller],
     ['TUN', s.tun ? '开' : '关'],
-    ['内核', ver],
+    ['内核', kernelLabel(s)],
   ].map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  const hint = $('#status-hint');
+  hint.textContent = statusHint(s);
+  hint.classList.toggle('hidden', !hint.textContent);
   $$('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === s.mode));
 }
 
@@ -154,8 +169,9 @@ async function loadProxies() {
 async function loadSubs() {
   const data = await api('/api/subs');
   const box = $('#subs-list');
-  if (!data.profiles.length) { box.innerHTML = '<p class="muted">暂无订阅</p>'; return; }
-  box.innerHTML = data.profiles.map(p => {
+  const profiles = data.profiles || [];
+  if (!profiles.length) { box.innerHTML = '<p class="muted">暂无订阅。填写名称和订阅地址后点「添加」。</p>'; return; }
+  box.innerHTML = profiles.map(p => {
     const u = p.userinfo || {};
     const traffic = (u.total || u.used) ? `流量 ${fmtBytes(u.used||0)} / ${fmtBytes(u.total||0)}` : '';
     const exp = u.expire_at ? `到期 ${u.expire_at}` : '';
@@ -223,10 +239,13 @@ $('#logout').onclick = () => {
 };
 
 $$('[data-core]').forEach(b => b.onclick = async () => {
+  b.disabled = true;
   try {
     await api('/api/core/' + b.dataset.core, { method: 'POST' });
-    setTimeout(refreshStatus, 500);
+    await refreshStatus();
+    setTimeout(refreshStatus, 800);
   } catch (e) { alert(e.message); }
+  finally { b.disabled = false; }
 });
 
 $$('.tab').forEach(t => t.onclick = () => {
@@ -255,6 +274,7 @@ $('#add-sub').onsubmit = async (e) => {
     await api('/api/subs', { method:'POST', body: JSON.stringify({ name: fd.get('name'), url: fd.get('url') }) });
     e.target.reset();
     await loadSubs();
+    await refreshStatus();
   } catch (err) { alert(err.message); }
 };
 

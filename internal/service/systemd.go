@@ -71,7 +71,7 @@ func Start(foreground bool) error {
 	if _, err := config.GenerateAndValidate(); err != nil {
 		return err
 	}
-	if foreground || !hasSystemdUser() {
+	if foreground || !userSystemdEnabled() {
 		return runForeground()
 	}
 	if err := WriteUnit(); err != nil {
@@ -82,12 +82,37 @@ func Start(foreground bool) error {
 }
 
 func Stop() error {
-	if hasSystemdUser() {
+	if userSystemdEnabled() {
 		if err := systemctl("stop", unitName); err == nil {
 			return nil
 		}
 	}
 	return stopByPIDFileOrPkill()
+}
+
+// StartBackground 启动内核并立即返回，不会占住当前终端。
+// 有用户级 systemd 时交给它管理，否则脱离终端在后台运行。
+func StartBackground() error {
+	if !userSystemdEnabled() {
+		return StartDetached()
+	}
+	return Start(false)
+}
+
+// RestartBackground 停止内核后再用 StartBackground 拉起。
+func RestartBackground() error {
+	_ = Stop()
+	time.Sleep(300 * time.Millisecond)
+	return StartBackground()
+}
+
+// userSystemdEnabled 判断是否该用用户级 systemd 管理内核。
+// PARTYCTL_FORCE_DETACH=1 时始终走后台（测试隔离，避免误操作系统服务）。
+func userSystemdEnabled() bool {
+	if os.Getenv("PARTYCTL_FORCE_DETACH") == "1" {
+		return false
+	}
+	return hasSystemdUser()
 }
 
 func Restart(foreground bool) error {

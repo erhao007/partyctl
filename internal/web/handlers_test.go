@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/partyctl/partyctl/internal/config"
@@ -37,7 +38,7 @@ func TestAuthAndStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := config.ProfilesFile{Profiles: []config.ProfileMeta{{
-		Name: "local",
+		Name:                 "local",
 		SubscriptionUserinfo: "upload=100; download=200; total=1000; expire=1893456000",
 	}}}
 	if err := config.SaveProfilesMeta(meta); err != nil {
@@ -138,6 +139,119 @@ func TestAuthAndStatus(t *testing.T) {
 	srv.mux.ServeHTTP(rr, req)
 	if rr.Code != 200 || !bytes.Contains(rr.Body.Bytes(), []byte("partyctl")) {
 		t.Fatalf("index: %d", rr.Code)
+	}
+}
+
+func TestWebWithoutSubscriptionThenStart(t *testing.T) {
+	t.Setenv("PARTYCTL_FORCE_DETACH", "1")
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+
+	subBody := []byte("proxies:\n  - name: DIRECT-NODE\n    type: direct\nproxy-groups:\n  - name: PROXY\n    type: select\n    proxies: [DIRECT, DIRECT-NODE]\nrules:\n  - MATCH,PROXY\n")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Subscription-Userinfo", "upload=1; download=2; total=10")
+		_, _ = w.Write(subBody)
+	}))
+	t.Cleanup(upstream.Close)
+
+	st := config.DefaultSettings()
+	st.Secret = "web-token"
+	if err := config.SaveSettings(st); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New("127.0.0.1:0", st.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	call := func(method, path string, body []byte) *httptest.ResponseRecorder {
+		t.Helper()
+		var rdr *bytes.Reader
+		if body != nil {
+			rdr = bytes.NewReader(body)
+		} else {
+			rdr = bytes.NewReader(nil)
+		}
+		req := httptest.NewRequest(method, path, rdr)
+		req.Header.Set("Authorization", "Bearer "+st.Secret)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		rr := httptest.NewRecorder()
+		srv.mux.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := call(http.MethodGet, "/api/status", nil)
+	if rr.Code != 200 {
+		t.Fatalf("status: %d %s", rr.Code, rr.Body.String())
+	}
+	var status map[string]any
+	_ = json.Unmarshal(rr.Body.Bytes(), &status)
+	if status["core_installed"] != false || status["current_profile"] != "" {
+		t.Fatalf("status: %#v", status)
+	}
+
+	rr = call(http.MethodPost, "/api/core/start", nil)
+	if rr.Code == 200 || !bytes.Contains(rr.Body.Bytes(), []byte("订阅")) {
+		t.Fatalf("start without sub: %d %s", rr.Code, rr.Body.String())
+	}
+
+	add, _ := json.Marshal(map[string]string{"name": "mysub", "url": upstream.URL})
+	rr = call(http.MethodPost, "/api/subs", add)
+	if rr.Code != 200 {
+		t.Fatalf("add: %d %s", rr.Code, rr.Body.String())
+	}
+	saved, err := config.LoadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.CurrentProfile != "mysub" {
+		t.Fatalf("first sub not activated: %#v", saved)
+	}
+	if _, err := os.Stat(config.WorkConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+
+	rr = call(http.MethodPost, "/api/core/start", nil)
+	if rr.Code == 200 || !bytes.Contains(rr.Body.Bytes(), []byte("内核")) {
+		t.Fatalf("start without core: %d %s", rr.Code, rr.Body.String())
+	}
+
+	bin := config.CoreBinaryPath()
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rr = call(http.MethodPost, "/api/core/start", nil)
+	if rr.Code != 200 {
+		t.Fatalf("start: %d %s", rr.Code, rr.Body.String())
+	}
+
+	add2, _ := json.Marshal(map[string]string{"name": "other", "url": upstream.URL + "/other"})
+	rr = call(http.MethodPost, "/api/subs", add2)
+	if rr.Code != 200 {
+		t.Fatalf("add other: %d %s", rr.Code, rr.Body.String())
+	}
+	saved, _ = config.LoadSettings()
+	if saved.CurrentProfile != "mysub" {
+		t.Fatalf("second sub replaced current: %s", saved.CurrentProfile)
+	}
+
+	rr = call(http.MethodPost, "/api/subs/other/use", nil)
+	if rr.Code != 200 {
+		t.Fatalf("use: %d %s", rr.Code, rr.Body.String())
+	}
+	saved, _ = config.LoadSettings()
+	if saved.CurrentProfile != "other" {
+		t.Fatalf("use did not switch: %s", saved.CurrentProfile)
+	}
+
+	page := call(http.MethodGet, "/", nil)
+	if !bytes.Contains(page.Body.Bytes(), []byte("第一次添加会自动启用")) {
+		t.Fatal("index missing subscription hint")
 	}
 }
 

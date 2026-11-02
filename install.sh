@@ -1,6 +1,8 @@
 #!/bin/sh
 # Install partyctl from a GitHub release, or from a mirror that uses the same path layout.
-# POSIX sh. Version and base URL come from the environment:
+# POSIX sh. After the binary is in place, installs mihomo if missing and starts the Web UI
+# unless --no-start / PARTYCTL_NO_START is set.
+# Version and base URL come from the environment:
 #   PARTYCTL_VERSION   default: latest
 #   PARTYCTL_BASE_URL  default: https://github.com/erhao007/partyctl/releases
 set -eu
@@ -9,18 +11,31 @@ PARTYCTL_VERSION="${PARTYCTL_VERSION:-latest}"
 PARTYCTL_BASE_URL="${PARTYCTL_BASE_URL:-https://github.com/erhao007/partyctl/releases}"
 
 user_install=0
+no_start=0
+case "$(printf '%s' "${PARTYCTL_NO_START:-}" | tr '[:upper:]' '[:lower:]')" in
+1 | true | yes | on) no_start=1 ;;
+esac
 
 usage() {
 	cat <<'EOF'
-Usage: install.sh [--user]
+Usage: install.sh [--user] [--no-start]
 
-  --user    install to ~/.local/bin (no sudo)
-            otherwise install to /usr/local/bin, using sudo when needed
+  --user       安装到 ~/.local/bin（不使用 sudo）
+               省略时安装到 /usr/local/bin，需要时使用 sudo
+  --no-start   只安装 partyctl 程序，不安装内核、不启动 Web
+
+默认会在装好程序后：
+  1. 若本机还没有可用的 mihomo，执行 partyctl core install
+  2. 启动 Web 管理界面，并尽量设为开机或登录自启
+重复运行会保留已有配置；内核已存在则不重新下载；正在运行的 Web 会重启到新版本。
 
 Environment:
   PARTYCTL_VERSION    release tag, or "latest" (default: latest)
   PARTYCTL_BASE_URL   release base URL
                       (default: https://github.com/erhao007/partyctl/releases)
+  PARTYCTL_NO_START   设为 1/true/yes/on 时等同于 --no-start
+                      要加在执行脚本的 sh 上，例如：
+                      curl -fsSL .../install.sh | PARTYCTL_NO_START=1 sh
 EOF
 }
 
@@ -29,10 +44,80 @@ die() {
 	exit 1
 }
 
+# print_manual_next 在 --no-start 时告诉用户还要自己做的步骤。
+print_manual_next() {
+	cmd=$1
+	cat <<EOF
+
+已跳过内核安装和 Web 启动（--no-start / PARTYCTL_NO_START）。
+
+下一步:
+  ${cmd} core install
+  ${cmd} sub add mysub 'https://example.com/clash.yaml'
+  ${cmd} sub use mysub
+  ${cmd} web enable
+  或: ${cmd} start --detach --with-web
+
+Web 默认地址: http://127.0.0.1:9800
+登录令牌: ${cmd} web token
+远程: ssh -L 9800:127.0.0.1:9800 user@host
+EOF
+}
+
+# print_ready_summary 在安装结束时打印 Web 地址、令牌和远程访问方式。
+print_ready_summary() {
+	setup_warn=$1
+	shown=$2
+	dest=$3
+	cmd=$4
+	web_url=$5
+	web_token=$6
+	web_port=9800
+	case "$web_url" in
+	*:*)
+		web_port=${web_url##*:}
+		web_port=${web_port%%/*}
+		;;
+	esac
+	if [ -z "$web_url" ]; then
+		web_url="http://127.0.0.1:9800"
+	fi
+	echo
+	if [ "$setup_warn" -eq 0 ]; then
+		echo "partyctl 已就绪"
+	else
+		echo "partyctl 已安装（有步骤未完成，见上面的警告）"
+	fi
+	echo "程序: ${dest} (${shown})"
+	echo "Web:  ${web_url}"
+	if [ -n "$web_token" ]; then
+		echo "登录令牌: ${web_token}"
+	else
+		echo "登录令牌: 暂时读不到，请稍后执行 ${cmd} web token"
+	fi
+	echo "以后查看令牌: ${cmd} web token"
+	cat <<EOF
+
+在这台机器的浏览器打开上面的地址，用令牌登录。
+没有订阅也可以打开。登录后到「订阅」添加并启用，再点「启动」运行内核。
+
+默认只监听本机。从别的电脑访问请做 SSH 转发:
+  ssh -L ${web_port}:127.0.0.1:${web_port} user@这台机器
+然后在你自己的浏览器打开 http://127.0.0.1:${web_port}
+
+若要让局域网直接访问，把 Web 监听改成 0.0.0.0:${web_port} 后重新执行:
+  ${cmd} web enable
+（只在可信网络上这样做。）
+EOF
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--user)
 		user_install=1
+		;;
+	--no-start)
+		no_start=1
 		;;
 	-h | --help)
 		usage
@@ -187,34 +272,36 @@ echo "已安装 partyctl ${shown} -> ${dest}"
 if [ "$(id -u)" -eq 0 ] && [ "$user_install" -eq 1 ]; then
 	echo "当前是 root，--user 仍安装到 ${dest_dir}。省略 --user 则安装到 /usr/local/bin。"
 fi
+partyctl_cmd="partyctl"
 case ":${PATH}:" in
 *":${dest_dir}:"*) ;;
 *)
+	partyctl_cmd="$dest"
 	echo "请将 ${dest_dir} 加入 PATH:"
 	echo "  export PATH=\"${dest_dir}:\$PATH\""
 	;;
 esac
 
-cat <<'EOF'
+if [ "$no_start" -eq 1 ]; then
+	print_manual_next "$partyctl_cmd"
+	exit 0
+fi
 
-下一步:
-  partyctl core install
-  partyctl sub add mysub 'https://example.com/clash.yaml'
-  partyctl sub use mysub
-  partyctl start --detach --with-web
-  （start 会自动 generate，不必单独执行）
+setup_warn=0
+echo "正在检查 mihomo 内核…"
+if ! "$dest" core install --if-missing; then
+	echo "警告: 内核没有安装成功。partyctl 程序本身已经装好，已有配置不会被改动。" >&2
+	echo "请稍后重试: ${partyctl_cmd} core install" >&2
+	echo "常见原因是暂时访问不了 GitHub。Web 管理界面仍会继续启动，你可以先打开页面。" >&2
+	setup_warn=1
+fi
 
-Web: http://127.0.0.1:9800
-登录令牌: partyctl web token
-远程: ssh -L 9800:127.0.0.1:9800 user@host
+echo "正在启动 Web 管理界面…"
+if ! "$dest" web enable; then
+	echo "警告: Web 管理界面没有启动成功。程序已安装，可稍后执行: ${partyctl_cmd} web enable" >&2
+	setup_warn=1
+fi
 
-常用命令:
-  partyctl status
-  partyctl stop
-  partyctl restart
-  partyctl log
-  partyctl node list
-  partyctl mode rule
-  partyctl proxy env
-  partyctl --help
-EOF
+web_url=$("$dest" web url 2>/dev/null) || web_url=""
+web_token=$("$dest" web token 2>/dev/null) || web_token=""
+print_ready_summary "$setup_warn" "$shown" "$dest" "$partyctl_cmd" "$web_url" "$web_token"
