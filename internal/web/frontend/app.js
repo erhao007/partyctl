@@ -39,6 +39,7 @@ async function boot() {
   }
   await refreshStatus();
   await loadSettings();
+  await loadProcProxy();
   await loadSubs();
   await loadOverrides();
   await loadProxies();
@@ -235,6 +236,26 @@ async function loadSettings() {
   f.web_enabled.checked = !!(s.web && s.web.enabled);
 }
 
+async function loadProcProxy() {
+  const box = $('#proc-proxy-status');
+  const list = $('#proc-proxy-list');
+  if (!box || !list) return;
+  try {
+    const s = await api('/api/proc-proxy');
+    const n = (s.procs || []).length;
+    box.textContent = (s.enabled ? '已开启' : '未开启') + (s.rules ? '，规则已安装' : '，规则未安装') + '，' + n + ' 个进程';
+    list.innerHTML = (s.procs || []).map(p => `<li>${p.pid} ${esc(p.cmd || '')} <button type="button" class="btn btn-ghost" data-rm="${p.pid}">撤销</button></li>`).join('') || '<li class="muted">当前没有接管任何进程</li>';
+    $$('[data-rm]', list).forEach(b => b.onclick = async () => {
+      try {
+        await api('/api/proc-proxy?pid=' + encodeURIComponent(b.dataset.rm), { method: 'DELETE' });
+        await loadProcProxy();
+      } catch (err) { alert(err.message); }
+    });
+  } catch (err) {
+    box.textContent = err.message;
+  }
+}
+
 // events
 $('#login-form').onsubmit = async (e) => {
   e.preventDefault();
@@ -269,6 +290,7 @@ $$('.tab').forEach(t => t.onclick = () => {
   $('#tab-' + t.dataset.tab).classList.remove('hidden');
   if (t.dataset.tab === 'logs' && !state.esLogs) connectLogs();
   if (t.dataset.tab === 'nodes') loadProxies();
+  if (t.dataset.tab === 'settings') loadProcProxy();
 });
 
 $$('.mode').forEach(b => b.onclick = async () => {
@@ -306,6 +328,23 @@ $('#ov-delete').onclick = async () => {
   await api('/api/overrides/' + encodeURIComponent(name), { method:'DELETE' });
   $('#ov-content').value = '';
   await loadOverrides();
+};
+
+$('#proc-proxy-add').onsubmit = async (e) => {
+  e.preventDefault();
+  const pid = Number(new FormData(e.target).get('pid'));
+  try {
+    await api('/api/proc-proxy', { method: 'POST', body: JSON.stringify({ pid }) });
+    e.target.reset();
+    await loadProcProxy();
+  } catch (err) { alert(err.message); }
+};
+$('#proc-proxy-clear').onclick = async () => {
+  if (!confirm('清理全部按进程代理规则？被接管的进程会恢复直连。')) return;
+  try {
+    await api('/api/proc-proxy/clear', { method: 'POST', body: '{}' });
+    await loadProcProxy();
+  } catch (err) { alert(err.message); }
 };
 
 $('#settings-form').onsubmit = async (e) => {

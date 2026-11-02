@@ -71,6 +71,10 @@ func (s *Server) routes() {
 	api.HandleFunc("GET /api/traffic", s.handleTrafficSSE)
 	api.HandleFunc("GET /api/logs", s.handleLogsSSE)
 	api.HandleFunc("POST /api/generate", s.handleGenerate)
+	api.HandleFunc("GET /api/proc-proxy", s.handleProcProxy)
+	api.HandleFunc("POST /api/proc-proxy", s.handleProcProxyAdd)
+	api.HandleFunc("DELETE /api/proc-proxy", s.handleProcProxyRemove)
+	api.HandleFunc("POST /api/proc-proxy/clear", s.handleProcProxyClear)
 	api.HandleFunc("POST /api/login", s.handleLogin)
 
 	s.mux.Handle("/api/", s.authMiddleware(api))

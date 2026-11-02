@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/partyctl/partyctl/internal/config"
+	"github.com/partyctl/partyctl/internal/procproxy"
 )
 
 // AlreadyRunningError 表示本配置目录已经有内核在跑。
@@ -113,17 +114,23 @@ func startLocked(detach bool) error {
 		return err
 	}
 	if detach || !userSystemdEnabled() {
-		return spawnDetached()
+		if err := spawnDetached(); err != nil {
+			return err
+		}
+	} else {
+		if err := WriteUnit(); err != nil {
+			return err
+		}
+		_ = systemctl("daemon-reload")
+		if err := systemctl("start", unitName); err != nil {
+			return err
+		}
+		if procs := ListOurCores(); len(procs) > 0 {
+			_ = writePIDFile(procs[0].PID)
+		}
 	}
-	if err := WriteUnit(); err != nil {
-		return err
-	}
-	_ = systemctl("daemon-reload")
-	if err := systemctl("start", unitName); err != nil {
-		return err
-	}
-	if procs := ListOurCores(); len(procs) > 0 {
-		_ = writePIDFile(procs[0].PID)
+	if procproxy.Enabled() {
+		return procproxy.WaitAndArm()
 	}
 	return nil
 }
@@ -145,6 +152,9 @@ func spawnDetached() error {
 }
 
 func stopLocked() error {
+	if err := procproxy.Disarm(); err != nil {
+		return fmt.Errorf("已取消停止内核：撤掉按进程代理规则失败，否则被接管的进程会断网。%w", err)
+	}
 	if userSystemdEnabled() {
 		_ = systemctl("stop", unitName)
 	}

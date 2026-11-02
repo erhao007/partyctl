@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/partyctl/partyctl/internal/config"
+	"github.com/partyctl/partyctl/internal/procproxy"
 )
 
 // Listener 是一个正在监听的 TCP 端口及其进程。
@@ -36,6 +37,18 @@ func EnsurePortsFree() error {
 	mixed := net.JoinHostPort(mixedHost, strconv.Itoa(st.MixedPort))
 	if msg := occupantMessage("mixed-port", mixed); msg != "" {
 		problems = append(problems, msg)
+	}
+	if procproxy.Enabled() {
+		if msg := occupantMessage("tproxy", net.JoinHostPort("127.0.0.1", strconv.Itoa(procproxy.TProxyPort))); msg != "" {
+			problems = append(problems, msg)
+		}
+		dnsPort := procproxy.DNSPort
+		if snap := procproxy.Snapshot(); snap.DNSPort > 0 {
+			dnsPort = snap.DNSPort
+		}
+		if msg := occupantMessage("按进程 DNS", net.JoinHostPort("127.0.0.1", strconv.Itoa(dnsPort))); msg != "" {
+			problems = append(problems, msg)
+		}
 	}
 	if len(problems) == 0 {
 		return nil

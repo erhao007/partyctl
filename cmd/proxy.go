@@ -7,7 +7,11 @@ import (
 
 var proxyCmd = &cobra.Command{
 	Use:   "proxy",
-	Short: "系统代理 / 环境变量",
+	Short: "系统代理，或按进程接管",
+	Long: `proxy on/off/env 管理 GNOME 系统代理和环境变量。
+
+proxy pid / proxy clear 只让指定进程走 mihomo，不开启全局 TUN，也不修改系统代理。
+这两类命令需要 root。内核被 partyctl 停止时会先撤掉接管规则，避免进程断网。`,
 }
 
 var proxyOnCmd = &cobra.Command{

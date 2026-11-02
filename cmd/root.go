@@ -11,6 +11,7 @@ var rootCmd = &cobra.Command{
 	Use:   "partyctl",
 	Short: "mihomo (Clash Meta) 的轻量 Ubuntu CLI 封装，灵感来自 Clash Party",
 	Long: `partyctl 管理 mihomo 内核、订阅配置、覆盖规则与系统代理。
+也可以只接管指定进程（cgroup v2 + nftables），不必开启全局 TUN。
 配置目录: ~/.config/partyctl/
 内核路径: ~/.local/share/partyctl/mihomo`,
 }

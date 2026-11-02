@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/partyctl/partyctl/internal/config"
+	"github.com/partyctl/partyctl/internal/procproxy"
 )
 
 const unitName = "partyctl.service"
@@ -126,7 +127,23 @@ func runForeground() error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	fmt.Fprintf(os.Stderr, "starting mihomo in foreground: %s -d %s\n", bin, config.WorkDir())
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if procproxy.Enabled() {
+		if err := procproxy.WaitAndArm(); err != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+			return err
+		}
+	}
+	err := cmd.Wait()
+	if procproxy.Enabled() {
+		if dErr := procproxy.Disarm(); dErr != nil && err == nil {
+			err = dErr
+		}
+	}
+	return err
 }
 
 // StartDetached starts mihomo in background without systemd (fallback).

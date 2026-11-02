@@ -113,12 +113,32 @@ partyctl proxy env
 partyctl tun on
 ```
 
+### 按进程接管
+
+只让指定进程走 mihomo，不打开全局 TUN，也不改 GNOME 系统代理。需要 root、cgroup v2、`nft` 和 `ip`。
+
+```bash
+sudo partyctl proxy pid 1234          # 接管已有进程，以及它之后创建的子进程
+sudo partyctl proxy pid list
+sudo partyctl proxy pid rm 1234
+sudo partyctl run -- curl -I https://example.com
+sudo partyctl proxy clear             # 迁回进程并删掉全部规则
+```
+
+用 `sudo` 时请保持和内核相同的 `HOME`（直接用 root 运行，或 `sudo -H`）。Web「设置」页也有同样的入口；Web 进程本身不是 root 时会提示需要 root。
+
+流量仍服从当前订阅的模式和规则。TCP/UDP 经 tproxy 进入 mihomo；明文 DNS（53 端口）改送到 mihomo 的 DNS，避免从被接管进程直接漏出去。127.0.0.1 上除 53 以外的端口不劫持。mihomo 自己不会被放进接管组，并用 `routing-mark` 排除，避免回环。
+
+`partyctl stop` / `restart` 会先拆掉规则再动内核。内核没了而规则还在时，下一次 `status` 或 `proxy pid list`（root）会拆掉规则，进程恢复直连，而不是卡死。`start` 时如果这些进程还在，会把规则装回去。订阅里已有的 `dns` 会保留，只补一个不与 53 冲突的监听地址；没有 `dns` 时，仅在功能开启期间写入一份 fake-ip DNS。`proxy clear` 会重启正在运行的内核，把这些临时字段从运行配置里去掉。
+
+局限：本机内核不支持在 output 链上做 TPROXY，因此用 fwmark + 本地路由 + prerouting TPROXY。ICMP 不接管。若在 partyctl 之外把内核 `kill -9`，需要再执行一次 `partyctl status` 或 `proxy clear` 才会拆规则。
+
 ## Web 界面
 
 - 纯 HTML/JS/CSS，经 `go:embed` 打进二进制，无前端构建步骤
 - 默认绑定 `127.0.0.1`；绑定非回环地址时会在 stderr 打印警告
 - 登录页 + `Authorization: Bearer <token>` / Cookie；token 默认等于控制器 `secret`
-- 功能：状态与启停、模式、订阅（添加、启用、更新、删除，含 subscription-userinfo 流量/到期解析）、覆盖编辑、节点选择与测速、实时流量与日志（SSE 代理内核）
+- 功能：状态与启停、模式、订阅（添加、启用、更新、删除，含 subscription-userinfo 流量/到期解析）、覆盖编辑、节点选择与测速、实时流量与日志（SSE 代理内核）、设置页里的按进程代理
 - 没有当前订阅时页面仍可打开。第一次添加订阅会自动启用，并尝试启动内核；已有订阅时添加不会擅自切换。内核未运行时，节点页提示先启动，而不会把控制器的 HTML 当成 JSON。
 
 主要 API（均需鉴权，除 `POST /api/login`）：
@@ -133,6 +153,7 @@ partyctl tun on
 | GET/PUT | `/api/proxies…` | 节点 |
 | GET | `/api/delay/{name}` | 延迟 |
 | GET | `/api/traffic` `/api/logs` | SSE |
+| GET/POST/DELETE | `/api/proc-proxy` | 查看、接管、撤销按进程代理；`POST /api/proc-proxy/clear` 清理全部规则 |
 
 ## 命令一览
 
@@ -146,7 +167,9 @@ partyctl tun on
 | `web [--listen]` / `web enable` / `web lan on\|off` / `web url` / `web token` | 前台启动 / 安装并自启 / 局域网访问开关 / 打印地址 / 打印登录令牌 |
 | `port` / `port set --mixed --controller` | 查看或修改 mixed-port 与外部控制器。9090/7890 被其他程序占用时 `start` 会拒绝启动并提示占用进程 |
 | `core reconcile` | 升级后把已经在跑的 partyctl 内核收成一个并重新启动。`start` 发现已在运行则提示，不再起第二个 |
-| `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
+| `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理。`proxy on/off/env` 仍是 GNOME 系统代理 |
+| `proxy pid <pid>...` / `proxy pid list` / `proxy pid rm <pid>` / `proxy clear` | 按进程接管或撤销。需要 root，不影响全局 TUN 和系统代理 |
+| `run -- <命令>` | 在按进程代理里启动程序 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 
 ## 本地最小配置示例

@@ -121,6 +121,17 @@
             <div class="full"><button class="btn" type="submit">保存并重新生成配置</button></div>
           </form>
         </div>
+        <div class="card" id="proc-proxy-card">
+          <h2>按进程代理</h2>
+          <p class="muted">只让指定进程及其之后创建的子进程走 mihomo，不开启全局 TUN，也不改系统代理。Web 进程需要 root 才能改规则。</p>
+          <p id="proc-proxy-status" class="muted"></p>
+          <ul id="proc-proxy-list"></ul>
+          <form id="proc-proxy-add" class="row">
+            <input name="pid" placeholder="PID" inputmode="numeric" />
+            <button class="btn" type="submit">接管</button>
+            <button class="btn btn-ghost" id="proc-proxy-clear" type="button">清理全部规则</button>
+          </form>
+        </div>
       </section>
 
       <section id="tab-logs" class="panel hidden">

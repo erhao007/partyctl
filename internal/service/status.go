@@ -10,6 +10,7 @@ import (
 
 	"github.com/partyctl/partyctl/internal/config"
 	"github.com/partyctl/partyctl/internal/core"
+	"github.com/partyctl/partyctl/internal/procproxy"
 )
 
 // Report is a point-in-time view of partyctl for `partyctl status`.
@@ -24,6 +25,7 @@ type Report struct {
 	MixedPort    int
 	Controller   string
 	TUN          bool
+	ProcProxy    string
 	WebRunning   bool
 	WebMode      string // system, user, detach; empty when stopped
 	WebURL       string
@@ -75,6 +77,8 @@ func Collect() (Report, error) {
 	}
 
 	cores := ListOurCores()
+	_ = procproxy.Heal(len(cores) > 0)
+	rep.ProcProxy = procproxy.Describe()
 	if pid, active := systemdCore(); active {
 		rep.CoreRunning = true
 		rep.RunMode = "systemd"
@@ -136,6 +140,11 @@ func FormatStatus(r Report) string {
 	} else {
 		fmt.Fprintf(&b, "TUN: 关\n")
 	}
+	procLabel := r.ProcProxy
+	if procLabel == "" {
+		procLabel = "关"
+	}
+	fmt.Fprintf(&b, "按进程代理: %s\n", procLabel)
 	if r.WebRunning {
 		fmt.Fprintf(&b, "Web: 运行中\n")
 	} else {

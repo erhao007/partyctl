@@ -9,6 +9,7 @@ import (
 
 	"github.com/partyctl/partyctl/internal/merge"
 	"github.com/partyctl/partyctl/internal/mirror"
+	"github.com/partyctl/partyctl/internal/procproxy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,6 +109,8 @@ func ForceBaseSettings(profile map[string]any, s Settings) {
 		}
 	}
 	applyMirrorGeox(profile)
+	// 仅在按进程代理开启时补 tproxy / routing-mark / DNS，不改 tun 开关。
+	procproxy.ApplyRuntime(profile)
 }
 
 // applyMirrorGeox 在订阅没有自带 geox-url 时，把 Geo 文件指到镜像，避免内核再去访问 GitHub。
