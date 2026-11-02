@@ -11,7 +11,13 @@
 ## 安装
 
 ```bash
-# 从源码构建
+# 推荐：经镜像安装到用户目录
+curl -fsSL https://get.251819788.xyz/install.sh | sh -s -- --user
+
+# 备用：GitHub raw
+curl -fsSL https://raw.githubusercontent.com/erhao007/partyctl/main/install.sh | sh -s -- --user
+
+# 或从源码构建
 cd partyctl
 go build -o partyctl .
 sudo install -m 755 partyctl /usr/local/bin/partyctl
@@ -143,7 +149,8 @@ git tag v0.1.0 && git push origin v0.1.0
 一键安装（`latest` 会跟随 `/latest/download/` 的重定向解析出版本标签）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/erhao007/partyctl/main/install.sh | sh
+curl -fsSL https://get.251819788.xyz/install.sh | sh -s -- --user
+# 备用
 curl -fsSL https://raw.githubusercontent.com/erhao007/partyctl/main/install.sh | sh -s -- --user
 ```
 
@@ -160,18 +167,17 @@ arm64 把文件名中的 `amd64` 换成 `arm64`。`PARTYCTL_VERSION` 可指定�
 
 ## Cloudflare 镜像
 
-`cloudflare/` 是一个 Worker：`GET /` 与 `GET /install.sh` 拉取最新 Release 里的 `install.sh`（没有则用 main 上的 raw 文件），并把默认 `PARTYCTL_BASE_URL` 改写为 `https://<请求主机>`。`GET /latest/download/<file>` 与 `GET /download/<tag>/<file>` 流式代理 GitHub Release 资源（跟随重定向），并带上缓存头。
+`cloudflare/` 是一个 Worker，已配置自定义域名 `get.251819788.xyz`（`workers.dev` 仍开启）。`GET /` 与 `GET /install.sh` 拉取最新 Release 里的 `install.sh`（没有则用 main 上的 raw 文件），并把默认 `PARTYCTL_BASE_URL` 改写为 `https://<请求主机>`。`GET /latest/download/<file>` 与 `GET /download/<tag>/<file>` 流式代理 GitHub Release 资源（跟随重定向），并带上缓存头。
+
+部署时把 API 令牌放在环境变量 `CLOUDFLARE_API_TOKEN` 里，不要写入仓库：
 
 ```bash
 cd cloudflare
-# 把 wrangler.toml 里的 partyctl.example.com 和 example.com 换成你的域名
-npx wrangler deploy
+CLOUDFLARE_API_TOKEN=你的令牌 npx wrangler deploy
 ```
 
-部署后在 Cloudflare 控制台给这个 Worker 绑定自定义域名，然后：
-
 ```bash
-curl -fsSL https://你的域名/install.sh | sh
+curl -fsSL https://get.251819788.xyz/install.sh | sh -s -- --user
 ```
 
 ## 许可

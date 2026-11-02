@@ -1,12 +1,10 @@
 name = "partyctl-release"
 main = "worker.js"
 compatibility_date = "2026-11-02"
+account_id = "04d7632d44788025bac6c4e40f8072be"
 
-# Placeholder domain. Replace both names before deploying, or delete this
-# route and bind a custom domain in the Cloudflare dashboard after
-# `npx wrangler deploy`.
+# Deployed custom domain. Authenticate with CLOUDFLARE_API_TOKEN in the
+# environment; do not commit the API token. workers.dev stays enabled.
 workers_dev = true
 
-[[routes]]
-pattern = "partyctl.example.com/*"
-zone_name = "example.com"
+routes = [{ pattern = "get.251819788.xyz", custom_domain = true }]
