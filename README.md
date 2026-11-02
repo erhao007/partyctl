@@ -201,8 +201,8 @@ arm64 把文件名中的 `amd64` 换成 `arm64`。`PARTYCTL_VERSION` 可指定�
 
 | 路径 | 上游 |
 |------|------|
-| `GET /mihomo/releases/latest` | `api.github.com/repos/MetaCubeX/mihomo/releases/latest`（响应里的下载地址改写到本镜像） |
-| `GET /mihomo/releases/tags/<v标签>` | 对应 tag 的 release JSON |
+| `GET /mihomo/releases/latest` | 跟随 `github.com/MetaCubeX/mihomo/releases/latest` 的重定向得到版本号，再按 `mihomo-linux-<arch>-<tag>.gz` 拼资产列表。不访问 `api.github.com` |
+| `GET /mihomo/releases/tags/<v标签>` | 确认该 tag 页面存在后，按同样规则拼资产列表 |
 | `GET /mihomo/download/<v标签>/<文件>` | `github.com/MetaCubeX/mihomo/releases/download/...` |
 | `GET /geox/download/<latest 或 v标签>/<文件>` | `MetaCubeX/meta-rules-dat` 里固定的 `geoip.dat`、`geosite.dat`、`geoip.metadb`、`GeoLite2-ASN.mmdb` |
 

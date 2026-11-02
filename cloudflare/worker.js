@@ -1,14 +1,28 @@
 const GITHUB_REPO = "erhao007/partyctl";
 
 // Default release base baked into install.sh. The mirror rewrites this to https://<host>.
-export const DEFAULT_RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases`;
+const DEFAULT_RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases`;
 
 // Default kernel/geox mirror baked into install.sh. Rewritten to the request host.
-export const DEFAULT_MIRROR_ORIGIN = "https://get.251819788.xyz";
+const DEFAULT_MIRROR_ORIGIN = "https://get.251819788.xyz";
 
-export const MIHOMO_API = "https://api.github.com/repos/MetaCubeX/mihomo/releases";
-export const MIHOMO_DOWNLOAD = "https://github.com/MetaCubeX/mihomo/releases/download";
-export const GEOX_DOWNLOAD = "https://github.com/MetaCubeX/meta-rules-dat/releases/download";
+// Version lookup uses the public release page, not api.github.com.
+// GitHub's REST API often answers 403 to unauthenticated Cloudflare egress.
+const MIHOMO_LATEST_PAGE = "https://github.com/MetaCubeX/mihomo/releases/latest";
+const MIHOMO_TAG_PAGE = "https://github.com/MetaCubeX/mihomo/releases/tag/";
+const MIHOMO_DOWNLOAD = "https://github.com/MetaCubeX/mihomo/releases/download";
+const GEOX_DOWNLOAD = "https://github.com/MetaCubeX/meta-rules-dat/releases/download";
+
+// Workers runtime rejects string exports. Tests read these through a function.
+export function workerConstants() {
+	return {
+		DEFAULT_RELEASE_BASE,
+		DEFAULT_MIRROR_ORIGIN,
+		GEOX_DOWNLOAD,
+		MIHOMO_DOWNLOAD,
+		MIHOMO_LATEST_PAGE,
+	};
+}
 
 const MIHOMO_TAG = /^v[0-9A-Za-z._-]+$/;
 const ASSET_NAME = /^[A-Za-z0-9._-]+$/;
@@ -72,6 +86,40 @@ export async function fetchAllowed(url, accept) {
 	throw new Error("too many redirects");
 }
 
+// Read the version from GitHub's /releases/latest redirect, e.g. .../releases/tag/v1.19.33.
+export function tagFromReleaseLocation(location) {
+	if (!location) return null;
+	let pathname;
+	try {
+		pathname = new URL(location, "https://github.com").pathname;
+	} catch {
+		return null;
+	}
+	const matched = pathname.match(/\/releases\/tag\/(v[0-9A-Za-z._-]+)\/?$/);
+	return matched ? safeToken(matched[1], MIHOMO_TAG) : null;
+}
+
+// Names partyctl selects: plain linux gz first, compatible only as a fallback.
+// ABI builds such as mihomo-linux-amd64-v1-<tag>.gz are omitted on purpose.
+export function mihomoAssetNames(tag) {
+	if (!safeToken(tag, MIHOMO_TAG)) return [];
+	const arches = ["linux-amd64", "linux-arm64"];
+	const names = arches.map((arch) => `mihomo-${arch}-${tag}.gz`);
+	for (const arch of arches) names.push(`mihomo-${arch}-compatible-${tag}.gz`);
+	return names;
+}
+
+export function mihomoReleaseDocument(tag, host) {
+	const base = mirrorBase(host) || "";
+	return {
+		tag_name: tag,
+		assets: mihomoAssetNames(tag).map((name) => ({
+			name,
+			browser_download_url: `${base}/mihomo/download/${tag}/${name}`,
+		})),
+	};
+}
+
 // Point mihomo asset URLs at this mirror. Other fields are left unchanged.
 export function rewriteMihomoRelease(jsonText, host) {
 	const base = mirrorBase(host);
@@ -128,22 +176,14 @@ export function routeRequest(pathname) {
 	}
 
 	if (pathname === "/mihomo/releases/latest") {
-		return {
-			kind: "mihomo-api",
-			upstream: `${MIHOMO_API}/latest`,
-			cacheControl: "public, max-age=300",
-		};
+		return { kind: "mihomo-release", tag: "", cacheControl: "public, max-age=300" };
 	}
 
 	const mihomoTag = pathname.match(/^\/mihomo\/releases\/tags\/([^/]+)$/);
 	if (mihomoTag) {
 		const tag = safeToken(mihomoTag[1], MIHOMO_TAG);
 		if (!tag) return { kind: "bad" };
-		return {
-			kind: "mihomo-api",
-			upstream: `${MIHOMO_API}/tags/${tag}`,
-			cacheControl: "public, max-age=3600",
-		};
+		return { kind: "mihomo-release", tag, cacheControl: "public, max-age=3600" };
 	}
 
 	const mihomoFile = pathname.match(/^\/mihomo\/download\/([^/]+)\/([^/]+)$/);
@@ -215,18 +255,71 @@ async function serveInstall(request) {
 	return new Response(body, { status: 200, headers });
 }
 
-async function serveMihomoAPI(request, route) {
-	let upstream;
+function noStore(extra) {
+	return { "Cache-Control": "no-store", ...extra };
+}
+
+// Pass the upstream status and body through. Error responses must not be cached.
+async function upstreamError(res) {
+	let text = "";
 	try {
-		upstream = await fetchAllowed(route.upstream, "application/vnd.github+json");
+		text = await res.text();
 	} catch {
-		return new Response("upstream unavailable\n", { status: 502 });
+		text = "";
 	}
-	if (!upstream.ok) {
-		return new Response("mihomo release unavailable\n", { status: upstream.status || 502 });
+	const type = res.headers.get("Content-Type") || "text/plain; charset=utf-8";
+	return new Response(text || `upstream ${res.status}\n`, {
+		status: res.status || 502,
+		headers: noStore({ "Content-Type": type }),
+	});
+}
+
+async function fetchGitHub(url, method = "GET") {
+	const parsed = new URL(url);
+	if (parsed.protocol !== "https:" || !hostAllowed(parsed.hostname)) {
+		throw new Error("upstream host not allowed");
 	}
-	const source = await upstream.text();
-	const body = rewriteMihomoRelease(source, new URL(request.url).host);
+	return fetch(url, {
+		method,
+		redirect: "manual",
+		headers: {
+			"User-Agent": UA,
+			Accept: "text/html,application/xhtml+xml",
+		},
+	});
+}
+
+async function serveMihomoRelease(request, route) {
+	let tag = route.tag;
+	try {
+		if (!tag) {
+			const res = await fetchGitHub(MIHOMO_LATEST_PAGE, "GET");
+			if (res.status < 300 || res.status >= 400) return upstreamError(res);
+			tag = tagFromReleaseLocation(res.headers.get("Location"));
+			if (!tag) {
+				const loc = res.headers.get("Location") || "";
+				return new Response(`cannot parse mihomo version from ${loc}\n`, {
+					status: 502,
+					headers: noStore({ "Content-Type": "text/plain; charset=utf-8" }),
+				});
+			}
+		} else {
+			const head = await fetchGitHub(`${MIHOMO_TAG_PAGE}${tag}`, "HEAD");
+			if (head.status >= 400) {
+				// HEAD often has an empty body. GET so the client can see GitHub's error.
+				const get = await fetchGitHub(`${MIHOMO_TAG_PAGE}${tag}`, "GET");
+				return upstreamError(get.status ? get : head);
+			}
+		}
+	} catch (err) {
+		const message = err && err.message ? err.message : "upstream unavailable";
+		return new Response(`${message}\n`, {
+			status: 502,
+			headers: noStore({ "Content-Type": "text/plain; charset=utf-8" }),
+		});
+	}
+
+	const body = JSON.stringify(mihomoReleaseDocument(tag, new URL(request.url).host));
 	const headers = {
 		"Content-Type": "application/json; charset=utf-8",
 		"Cache-Control": route.cacheControl,
@@ -245,11 +338,15 @@ async function serveAsset(request, route) {
 		upstream = route.allowed
 			? await fetchAllowed(route.upstream, accept)
 			: await fetchUpstream(route.upstream, accept);
-	} catch {
-		return new Response("upstream unavailable\n", { status: 502 });
+	} catch (err) {
+		const message = err && err.message ? err.message : "upstream unavailable";
+		return new Response(`${message}\n`, {
+			status: 502,
+			headers: noStore({ "Content-Type": "text/plain; charset=utf-8" }),
+		});
 	}
 	if (!upstream.ok || !upstream.body) {
-		return new Response("asset unavailable\n", { status: upstream.status || 502 });
+		return upstreamError(upstream);
 	}
 
 	const headers = new Headers();
@@ -278,7 +375,7 @@ export default {
 
 		const route = routeRequest(new URL(request.url).pathname);
 		if (route.kind === "install") return serveInstall(request);
-		if (route.kind === "mihomo-api") return serveMihomoAPI(request, route);
+		if (route.kind === "mihomo-release") return serveMihomoRelease(request, route);
 		if (route.kind === "asset") return serveAsset(request, route);
 		if (route.kind === "bad") return new Response("bad request\n", { status: 400 });
 		return new Response("not found\n", { status: 404 });

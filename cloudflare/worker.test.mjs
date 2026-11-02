@@ -3,16 +3,21 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import worker, {
+	mihomoAssetNames,
+	mirrorBase,
+	rewriteInstallScript,
+	routeRequest,
+	tagFromReleaseLocation,
+	workerConstants,
+} from "./worker.js";
+
+const {
 	DEFAULT_MIRROR_ORIGIN,
 	DEFAULT_RELEASE_BASE,
 	GEOX_DOWNLOAD,
-	MIHOMO_API,
 	MIHOMO_DOWNLOAD,
-	mirrorBase,
-	rewriteInstallScript,
-	rewriteMihomoRelease,
-	routeRequest,
-} from "./worker.js";
+	MIHOMO_LATEST_PAGE,
+} = workerConstants();
 
 const installSource = readFileSync(new URL("../install.sh", import.meta.url), "utf8");
 
@@ -51,12 +56,22 @@ test("routes map install and release downloads", () => {
 	assert.equal(routeRequest("/download/not-a-tag/file").kind, "bad");
 	assert.equal(routeRequest("/nope").kind, "notfound");
 	assert.deepEqual(routeRequest("/mihomo/releases/latest"), {
-		kind: "mihomo-api",
-		upstream: `${MIHOMO_API}/latest`,
+		kind: "mihomo-release",
+		tag: "",
 		cacheControl: "public, max-age=300",
 	});
-	assert.equal(routeRequest("/mihomo/releases/tags/v1.19.33").upstream, `${MIHOMO_API}/tags/v1.19.33`);
+	assert.deepEqual(routeRequest("/mihomo/releases/tags/v1.19.33"), {
+		kind: "mihomo-release",
+		tag: "v1.19.33",
+		cacheControl: "public, max-age=3600",
+	});
 	assert.equal(routeRequest("/mihomo/releases/tags/latest").kind, "bad");
+	assert.equal(tagFromReleaseLocation("https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.33"), "v1.19.33");
+	assert.equal(tagFromReleaseLocation("https://github.com/MetaCubeX/mihomo/releases/latest"), null);
+	assert.deepEqual(mihomoAssetNames("v1.19.33").slice(0, 2), [
+		"mihomo-linux-amd64-v1.19.33.gz",
+		"mihomo-linux-arm64-v1.19.33.gz",
+	]);
 	assert.equal(routeRequest("/mihomo/download/v1.2.3/mihomo-linux-amd64-v1.2.3.gz").upstream,
 		`${MIHOMO_DOWNLOAD}/v1.2.3/mihomo-linux-amd64-v1.2.3.gz`);
 	assert.equal(routeRequest("/mihomo/download/../secret").kind, "bad");
@@ -145,28 +160,41 @@ test("GET /download/<tag>/<file> uses a long cache and streams the body", async 
 	}
 });
 
-test("mihomo release JSON is rewritten onto the mirror and evil redirects are refused", async () => {
+test("mihomo release JSON comes from the latest redirect, and upstream errors are not cached", async () => {
 	const original = globalThis.fetch;
-	const payload = JSON.stringify({
-		tag_name: "v1.2.3",
-		assets: [{
-			name: "mihomo-linux-amd64-v1.2.3.gz",
-			browser_download_url: `${MIHOMO_DOWNLOAD}/v1.2.3/mihomo-linux-amd64-v1.2.3.gz`,
-		}],
-	});
 	globalThis.fetch = async (url) => {
-		assert.equal(String(url), `${MIHOMO_API}/latest`);
-		return new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
+		assert.equal(String(url), MIHOMO_LATEST_PAGE);
+		return new Response(null, {
+			status: 302,
+			headers: { Location: "https://github.com/MetaCubeX/mihomo/releases/tag/v1.2.3" },
+		});
 	};
 	try {
 		const res = await worker.fetch(new Request("https://get.251819788.xyz/mihomo/releases/latest"));
 		assert.equal(res.status, 200);
+		assert.equal(res.headers.get("Cache-Control"), "public, max-age=300");
 		const body = await res.json();
+		assert.equal(body.tag_name, "v1.2.3");
+		assert.equal(body.assets[0].name, "mihomo-linux-amd64-v1.2.3.gz");
 		assert.equal(
 			body.assets[0].browser_download_url,
 			"https://get.251819788.xyz/mihomo/download/v1.2.3/mihomo-linux-amd64-v1.2.3.gz",
 		);
-		assert.equal(rewriteMihomoRelease("not-json", "get.251819788.xyz"), "not-json");
+		assert.equal(body.assets.some((a) => a.name.includes("-v1-")), false);
+	} finally {
+		globalThis.fetch = original;
+	}
+
+	globalThis.fetch = async () =>
+		new Response("api rate limit exceeded", {
+			status: 403,
+			headers: { "Content-Type": "text/plain" },
+		});
+	try {
+		const res = await worker.fetch(new Request("https://get.251819788.xyz/mihomo/releases/latest"));
+		assert.equal(res.status, 403);
+		assert.equal(res.headers.get("Cache-Control"), "no-store");
+		assert.equal(await res.text(), "api rate limit exceeded");
 	} finally {
 		globalThis.fetch = original;
 	}
