@@ -107,9 +107,9 @@ print_ready_summary() {
   ssh -L ${web_port}:127.0.0.1:${web_port} user@这台机器
 然后在你自己的浏览器打开 http://127.0.0.1:${web_port}
 
-若要让局域网直接访问，把 Web 监听改成 0.0.0.0:${web_port} 后重新执行:
-  ${cmd} web enable
-（只在可信网络上这样做。）
+若要让局域网里的其他设备打开 Web:
+  ${cmd} web lan on
+只在可信网络上使用。关闭时执行 ${cmd} web lan off。
 EOF
 }
 

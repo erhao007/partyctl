@@ -95,8 +95,12 @@ Web 的自启方式：
 
 ```bash
 partyctl web enable                 # 按上面的规则安装并启动（已在跑则重启）
+partyctl web lan on                 # 监听 0.0.0.0 并重启，供局域网访问
+partyctl web lan off                # 恢复只监听 127.0.0.1
 partyctl web --listen 127.0.0.1:9800  # 前台运行，不安装服务
 ```
+
+`web lan on` 会打印本机各网卡的访问地址，以及 `partyctl web token`。只在可信网络上开启。如果装了 ufw 并且可能拦截，会提示 `sudo ufw allow <端口>/tcp`，不会自动改防火墙。
 
 ### CLI 其余常用命令
 
@@ -139,7 +143,7 @@ partyctl tun on
 | `override add/list/rm` | 覆盖管理 |
 | `generate` | 生成配置并校验（`start` 也会自动执行） |
 | `start/stop/restart/status` | 生命周期；`status` 汇总内核、Web 与路径；`start --with-web` 会再后台拉起一份 Web |
-| `web [--listen]` / `web enable` / `web url` / `web token` | 前台启动 / 安装并自启 / 打印地址 / 打印登录令牌 |
+| `web [--listen]` / `web enable` / `web lan on\|off` / `web url` / `web token` | 前台启动 / 安装并自启 / 局域网访问开关 / 打印地址 / 打印登录令牌 |
 | `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 

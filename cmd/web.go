@@ -61,6 +61,37 @@ var webURLCmd = &cobra.Command{
 	},
 }
 
+var webLANCmd = &cobra.Command{
+	Use:   "lan",
+	Short: "开启或关闭 Web 的局域网访问",
+}
+
+var webLANOnCmd = &cobra.Command{
+	Use:   "on",
+	Short: "监听 0.0.0.0 并重启 Web（只在可信网络使用）",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.WebLAN(true)
+		if msg != "" {
+			fmt.Fprintln(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
+var webLANOffCmd = &cobra.Command{
+	Use:   "off",
+	Short: "恢复只监听 127.0.0.1 并重启 Web",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.WebLAN(false)
+		if msg != "" {
+			fmt.Fprintln(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
 var webEnableCmd = &cobra.Command{
 	Use:   "enable",
 	Short: "安装并启动 Web（systemd 开机/登录自启，否则后台运行）",
@@ -76,6 +107,7 @@ var webEnableCmd = &cobra.Command{
 
 func init() {
 	webCmd.Flags().StringVar(&webListen, "listen", "", "监听地址（默认 127.0.0.1:9800 或配置 web.listen）")
-	webCmd.AddCommand(webTokenCmd, webURLCmd, webEnableCmd)
+	webLANCmd.AddCommand(webLANOnCmd, webLANOffCmd)
+	webCmd.AddCommand(webTokenCmd, webURLCmd, webEnableCmd, webLANCmd)
 	rootCmd.AddCommand(webCmd)
 }

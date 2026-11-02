@@ -25,6 +25,15 @@ func withCmdOutput(t *testing.T, args []string) string {
 	return buf.String()
 }
 
+func TestWebLANHelp(t *testing.T) {
+	out := withCmdOutput(t, []string{"web", "lan", "--help"})
+	for _, want := range []string{"on", "off", "局域网"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help missing %q\n%s", want, out)
+		}
+	}
+}
+
 func TestWebTokenAndURL(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
@@ -66,6 +75,7 @@ func TestStatusCommandFields(t *testing.T) {
 		"Web: 未运行\n",
 		"Web 运行方式: -\n",
 		"Web 地址: http://127.0.0.1:9800\n",
+		"Web 局域网: 关\n",
 		"config.yaml",
 		"profiles/local.yaml",
 		"work/config.yaml",

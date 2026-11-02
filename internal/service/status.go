@@ -134,11 +134,23 @@ func FormatStatus(r Report) string {
 	}
 	fmt.Fprintf(&b, "Web 运行方式: %s\n", webModeLabel(webMode))
 	fmt.Fprintf(&b, "Web 地址: %s\n", dash(r.WebURL))
+	if WebLANOpen(listenFromWebURL(r.WebURL)) {
+		fmt.Fprintf(&b, "Web 局域网: 开\n")
+	} else {
+		fmt.Fprintf(&b, "Web 局域网: 关\n")
+	}
 	fmt.Fprintf(&b, "设置: %s\n", dash(r.SettingsPath))
 	fmt.Fprintf(&b, "当前配置文件: %s\n", dash(r.ProfilePath))
 	fmt.Fprintf(&b, "运行配置: %s\n", dash(r.WorkConfig))
 	fmt.Fprintf(&b, "内核: %s\n", dash(r.CoreBinary))
 	return b.String()
+}
+
+func listenFromWebURL(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "https://")
+	s = strings.TrimPrefix(s, "http://")
+	return s
 }
 
 func dash(s string) string {

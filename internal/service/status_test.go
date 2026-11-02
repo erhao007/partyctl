@@ -37,6 +37,7 @@ func TestFormatStatusRunning(t *testing.T) {
 		"Web: 运行中",
 		"Web 运行方式: systemd（开机自启）",
 		"Web 地址: http://127.0.0.1:9800",
+		"Web 局域网: 关",
 		"设置: /tmp/config.yaml",
 		"当前配置文件: /tmp/profiles/mysub.yaml",
 		"运行配置: /tmp/work/config.yaml",
@@ -72,6 +73,7 @@ func TestFormatStatusStopped(t *testing.T) {
 		"Web: 未运行",
 		"Web 运行方式: -",
 		"Web 地址: http://127.0.0.1:9800",
+		"Web 局域网: 关",
 		"当前配置文件: -",
 	} {
 		if !strings.Contains(got, line+"\n") {
@@ -97,6 +99,9 @@ func TestArgMatchers(t *testing.T) {
 	}
 	if isWebServerArgs([]string{"partyctl", "web", "enable"}) {
 		t.Fatal("web enable is not the server")
+	}
+	if isWebServerArgs([]string{"partyctl", "web", "lan", "on"}) {
+		t.Fatal("web lan is not the server")
 	}
 	if !isWebServerArgs([]string{"/usr/local/bin/partyctl", "web", "--listen=127.0.0.1:9800"}) {
 		t.Fatal("expected --listen= form to count as the server")

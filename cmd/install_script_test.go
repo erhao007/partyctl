@@ -66,6 +66,9 @@ func TestInstallScriptSetUpAndIdempotent(t *testing.T) {
 	if !strings.Contains(out, "ssh -L 9800:127.0.0.1:9800") || !strings.Contains(out, "订阅") {
 		t.Fatalf("summary missing remote or subscription hint:\n%s", out)
 	}
+	if !strings.Contains(out, "web lan on") {
+		t.Fatalf("summary should recommend web lan on:\n%s", out)
+	}
 	if !strings.Contains(out, "partyctl 已就绪") {
 		t.Fatalf("expected success banner:\n%s", out)
 	}
