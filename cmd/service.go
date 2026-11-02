@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/partyctl/partyctl/internal/config"
@@ -50,7 +51,12 @@ func startWebDetached(st config.Settings) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	fmt.Printf("web UI starting on http://%s (pid=%d)\n", listen, cmd.Process.Pid)
+	url := listen
+	if !strings.Contains(url, "://") {
+		url = "http://" + url
+	}
+	fmt.Printf("Web: %s (pid=%d)\n", url, cmd.Process.Pid)
+	fmt.Println("登录令牌: partyctl web token")
 	_ = cmd.Process.Release()
 	return nil
 }
@@ -78,10 +84,10 @@ var statusCmd = &cobra.Command{
 	Short: "查看运行状态",
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := service.Status()
-		fmt.Print(out)
-		if err != nil {
-			return
+		if out != "" {
+			fmt.Fprint(cmd.OutOrStdout(), out)
 		}
+		fatal(err)
 	},
 }
 

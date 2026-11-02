@@ -183,24 +183,38 @@ if bin_version=$("$dest" version 2>/dev/null); then
 		shown=$bin_version
 	fi
 fi
-echo "Installed partyctl ${shown} -> ${dest}"
-if [ "$user_install" -eq 1 ]; then
-	case ":${PATH}:" in
-	*":${dest_dir}:"*) ;;
-	*)
-		echo "Add ${dest_dir} to PATH if needed:"
-		echo "  export PATH=\"${dest_dir}:\$PATH\""
-		;;
-	esac
+echo "已安装 partyctl ${shown} -> ${dest}"
+if [ "$(id -u)" -eq 0 ] && [ "$user_install" -eq 1 ]; then
+	echo "当前是 root，--user 仍安装到 ${dest_dir}。省略 --user 则安装到 /usr/local/bin。"
 fi
+case ":${PATH}:" in
+*":${dest_dir}:"*) ;;
+*)
+	echo "请将 ${dest_dir} 加入 PATH:"
+	echo "  export PATH=\"${dest_dir}:\$PATH\""
+	;;
+esac
 
 cat <<'EOF'
 
-Next steps:
-  partyctl version
+下一步:
   partyctl core install
   partyctl sub add mysub 'https://example.com/clash.yaml'
   partyctl sub use mysub
-  partyctl generate
   partyctl start --detach --with-web
+  （start 会自动 generate，不必单独执行）
+
+Web: http://127.0.0.1:9800
+登录令牌: partyctl web token
+远程: ssh -L 9800:127.0.0.1:9800 user@host
+
+常用命令:
+  partyctl status
+  partyctl stop
+  partyctl restart
+  partyctl log
+  partyctl node list
+  partyctl mode rule
+  partyctl proxy env
+  partyctl --help
 EOF

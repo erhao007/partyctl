@@ -67,6 +67,7 @@ func systemctl(args ...string) error {
 }
 
 func Start(foreground bool) error {
+	// Refresh work/config.yaml on every start so a missing or outdated runtime config is rewritten.
 	if _, err := config.GenerateAndValidate(); err != nil {
 		return err
 	}
@@ -95,19 +96,6 @@ func Restart(foreground bool) error {
 	return Start(foreground)
 }
 
-func Status() (string, error) {
-	if hasSystemdUser() {
-		out, err := exec.Command("systemctl", "--user", "status", unitName, "--no-pager").CombinedOutput()
-		return string(out), err
-	}
-	bin := config.CoreBinaryPath()
-	out, err := exec.Command("pgrep", "-a", "-f", bin+".*-d "+config.WorkDir()).CombinedOutput()
-	if err != nil {
-		return "partyctl mihomo: not running (no systemd user session; pgrep found nothing)\n", nil
-	}
-	return "running (no systemd):\n" + string(out), nil
-}
-
 func runForeground() error {
 	bin := config.CoreBinaryPath()
 	cmd := exec.Command(bin, "-d", config.WorkDir())
@@ -127,6 +115,7 @@ func stopByPIDFileOrPkill() error {
 
 // StartDetached starts mihomo in background without systemd (fallback).
 func StartDetached() error {
+	// Same refresh as Start: missing or outdated work/config.yaml is rewritten before launch.
 	if _, err := config.GenerateAndValidate(); err != nil {
 		return err
 	}
@@ -144,7 +133,6 @@ func StartDetached() error {
 }
 
 func HasSystemdUser() bool { return hasSystemdUser() }
-
 
 // IsRunning reports whether mihomo for the partyctl workdir appears running.
 func IsRunning() bool {

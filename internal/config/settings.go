@@ -5,24 +5,25 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 // Settings is partyctl's own config (~/.config/partyctl/config.yaml).
 type Settings struct {
-	MixedPort           int    `yaml:"mixed-port"`
-	ExternalController  string `yaml:"external-controller"`
-	Secret              string `yaml:"secret"`
-	CurrentProfile      string `yaml:"current-profile"`
-	Mode                string `yaml:"mode"`
-	TUNEnabled          bool   `yaml:"tun"`
-	LogLevel            string `yaml:"log-level"`
-	AllowLan            bool   `yaml:"allow-lan"`
-	DelayTestURL        string `yaml:"delay-test-url"`
-	DelayTestTimeout    int    `yaml:"delay-test-timeout"`
-	Overrides []string  `yaml:"overrides"` // ordered override file basenames
-	Web       WebConfig `yaml:"web"`
+	MixedPort          int       `yaml:"mixed-port"`
+	ExternalController string    `yaml:"external-controller"`
+	Secret             string    `yaml:"secret"`
+	CurrentProfile     string    `yaml:"current-profile"`
+	Mode               string    `yaml:"mode"`
+	TUNEnabled         bool      `yaml:"tun"`
+	LogLevel           string    `yaml:"log-level"`
+	AllowLan           bool      `yaml:"allow-lan"`
+	DelayTestURL       string    `yaml:"delay-test-url"`
+	DelayTestTimeout   int       `yaml:"delay-test-timeout"`
+	Overrides          []string  `yaml:"overrides"` // ordered override file basenames
+	Web                WebConfig `yaml:"web"`
 }
 
 // WebConfig controls the embedded web UI.
@@ -41,7 +42,7 @@ func DefaultSettings() Settings {
 		LogLevel:           "info",
 		DelayTestURL:       "http://www.gstatic.com/generate_204",
 		DelayTestTimeout:   5000,
-		Overrides: nil,
+		Overrides:          nil,
 		Web: WebConfig{
 			Enabled: false,
 			Listen:  "127.0.0.1:9800",
@@ -118,10 +119,10 @@ func generateSecret() string {
 
 // ProfileMeta holds subscription metadata.
 type ProfileMeta struct {
-	Name                  string `yaml:"name"`
-	URL                   string `yaml:"url,omitempty"`
-	Updated               string `yaml:"updated,omitempty"`
-	SubscriptionUserinfo  string `yaml:"subscription-userinfo,omitempty"`
+	Name                 string `yaml:"name"`
+	URL                  string `yaml:"url,omitempty"`
+	Updated              string `yaml:"updated,omitempty"`
+	SubscriptionUserinfo string `yaml:"subscription-userinfo,omitempty"`
 }
 
 type ProfilesFile struct {
@@ -167,11 +168,22 @@ func FindProfile(pf ProfilesFile, name string) (ProfileMeta, int, bool) {
 	return ProfileMeta{}, -1, false
 }
 
-
 // WebAuthToken returns web.token if set, otherwise the controller secret.
 func WebAuthToken(s Settings) string {
 	if s.Web.Token != "" {
 		return s.Web.Token
 	}
 	return s.Secret
+}
+
+// WebURL is the browser address for the embedded UI.
+func WebURL(s Settings) string {
+	listen := strings.TrimSpace(s.Web.Listen)
+	if listen == "" {
+		listen = "127.0.0.1:9800"
+	}
+	if strings.Contains(listen, "://") {
+		return listen
+	}
+	return "http://" + listen
 }

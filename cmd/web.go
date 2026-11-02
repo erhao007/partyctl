@@ -38,7 +38,30 @@ var webCmd = &cobra.Command{
 	},
 }
 
+var webTokenCmd = &cobra.Command{
+	Use:   "token",
+	Short: "打印 Web 登录令牌",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		st, err := config.LoadSettings()
+		fatal(err)
+		fmt.Fprintln(cmd.OutOrStdout(), config.WebAuthToken(st))
+	},
+}
+
+var webURLCmd = &cobra.Command{
+	Use:   "url",
+	Short: "打印 Web 界面地址",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		st, err := config.LoadSettings()
+		fatal(err)
+		fmt.Fprintln(cmd.OutOrStdout(), config.WebURL(st))
+	},
+}
+
 func init() {
 	webCmd.Flags().StringVar(&webListen, "listen", "", "监听地址（默认 127.0.0.1:9800 或配置 web.listen）")
+	webCmd.AddCommand(webTokenCmd, webURLCmd)
 	rootCmd.AddCommand(webCmd)
 }

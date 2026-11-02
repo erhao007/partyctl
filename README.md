@@ -60,9 +60,10 @@ web:
 partyctl core install
 partyctl sub add mysub 'https://example.com/clash.yaml'
 partyctl sub use mysub
-partyctl generate
-partyctl start --detach --with-web
-# 浏览器打开 http://127.0.0.1:9800/ ，用 secret（或 web.token）登录
+partyctl start --detach --with-web   # 自动 generate
+partyctl web url
+partyctl web token
+# 浏览器打开 http://127.0.0.1:9800/ 。远程：ssh -L 9800:127.0.0.1:9800 user@host
 ```
 
 也可单独启动 Web：
@@ -109,9 +110,9 @@ partyctl tun on
 | `core install [--version]` / `core version` | 下载安装 / 查看内核 |
 | `sub add/update/use/list/rm` | 订阅管理 |
 | `override add/list/rm` | 覆盖管理 |
-| `generate` | 生成配置并校验 |
-| `start/stop/restart/status` | 生命周期；`start --with-web` 可同启 Web |
-| `web [--listen]` | 嵌入式 Web UI |
+| `generate` | 生成配置并校验（`start` 也会自动执行） |
+| `start/stop/restart/status` | 生命周期；`status` 汇总内核、Web 与路径；`start --with-web` 同启 Web |
+| `web [--listen]` / `web url` / `web token` | 启动界面 / 打印地址 / 打印登录令牌 |
 | `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 
