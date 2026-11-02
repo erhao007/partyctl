@@ -46,6 +46,10 @@ func TestNodesWithRealMihomo(t *testing.T) {
 	}
 	st := config.DefaultSettings()
 	st.Secret = "e2e-secret"
+	st.MixedPort = port + 1
+	if st.MixedPort > 65535 {
+		st.MixedPort = port - 1
+	}
 	st.ExternalController = fmt.Sprintf("127.0.0.1:%d", port)
 	st.Web.Listen = "127.0.0.1:9800"
 	if err := config.SaveSettings(st); err != nil {

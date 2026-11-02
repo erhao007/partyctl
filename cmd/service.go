@@ -20,10 +20,15 @@ var startCmd = &cobra.Command{
 		st, err := config.LoadSettings()
 		fatal(err)
 		if startDetach && !startForeground {
-			fatal(service.StartDetached())
+			err = service.StartDetached()
 		} else {
-			fatal(service.Start(startForeground))
+			err = service.Start(startForeground)
 		}
+		if service.IsAlreadyRunning(err) {
+			fmt.Fprintln(cmd.OutOrStdout(), err.Error())
+			err = nil
+		}
+		fatal(err)
 		if startWithWeb || st.Web.Enabled {
 			if err := startWebDetached(st); err != nil {
 				fmt.Fprintln(os.Stderr, "warning: web auto-start failed:", err)

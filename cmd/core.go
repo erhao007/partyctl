@@ -6,6 +6,7 @@ import (
 
 	"github.com/partyctl/partyctl/internal/core"
 	"github.com/partyctl/partyctl/internal/mirror"
+	"github.com/partyctl/partyctl/internal/service"
 	"github.com/spf13/cobra"
 )
 
@@ -49,6 +50,19 @@ var coreInstallCmd = &cobra.Command{
 	},
 }
 
+var coreReconcileCmd = &cobra.Command{
+	Use:   "reconcile",
+	Short: "若内核已在运行，收成一个进程并重新启动；未运行则不动",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.ReconcileCore()
+		if msg != "" {
+			fmt.Fprint(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
 var coreVersionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "显示已安装 mihomo 版本",
@@ -63,5 +77,5 @@ func init() {
 	coreInstallCmd.Flags().StringVar(&coreInstallVersion, "version", "", "release tag（默认 latest）")
 	coreInstallCmd.Flags().BoolVar(&coreInstallIfMissing, "if-missing", false, "内核已能运行时跳过下载")
 	coreInstallCmd.Flags().StringVar(&coreInstallMirror, "mirror", "", "内核镜像原点（默认 $PARTYCTL_MIRROR 或 https://get.251819788.xyz；off 表示只从 GitHub 下载）")
-	coreCmd.AddCommand(coreInstallCmd, coreVersionCmd)
+	coreCmd.AddCommand(coreInstallCmd, coreVersionCmd, coreReconcileCmd)
 }

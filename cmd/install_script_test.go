@@ -88,6 +88,9 @@ func TestInstallScriptSetUpAndIdempotent(t *testing.T) {
 	if strings.Count(log, "web enable") != 2 {
 		t.Fatalf("web enable calls:\n%s", log)
 	}
+	if strings.Count(log, "core reconcile") != 2 {
+		t.Fatalf("core reconcile calls:\n%s", log)
+	}
 }
 
 func TestInstallScriptContinuesAfterSetupFailure(t *testing.T) {

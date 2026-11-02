@@ -144,7 +144,8 @@ partyctl tun on
 | `generate` | 生成配置并校验（`start` 也会自动执行） |
 | `start/stop/restart/status` | 生命周期；`status` 汇总内核、Web 与路径；`start --with-web` 会再后台拉起一份 Web |
 | `web [--listen]` / `web enable` / `web lan on\|off` / `web url` / `web token` | 前台启动 / 安装并自启 / 局域网访问开关 / 打印地址 / 打印登录令牌 |
-| `port` / `port set --mixed --controller` | 查看或修改 mixed-port 与外部控制器。9090/7890 被占用时 `start` 会拒绝启动并提示占用进程 |
+| `port` / `port set --mixed --controller` | 查看或修改 mixed-port 与外部控制器。9090/7890 被其他程序占用时 `start` 会拒绝启动并提示占用进程 |
+| `core reconcile` | 升级后把已经在跑的 partyctl 内核收成一个并重新启动。`start` 发现已在运行则提示，不再起第二个 |
 | `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 

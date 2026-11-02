@@ -299,6 +299,12 @@ if ! "$dest" core install --if-missing --mirror "$core_mirror"; then
 	setup_warn=1
 fi
 
+echo "正在整理已运行的内核…"
+if ! "$dest" core reconcile; then
+	echo "警告: 没能把已运行的内核收成一个。可稍后执行: ${partyctl_cmd} core reconcile" >&2
+	setup_warn=1
+fi
+
 echo "正在启动 Web 管理界面…"
 if ! "$dest" web enable; then
 	echo "警告: Web 管理界面没有启动成功。程序已安装，可稍后执行: ${partyctl_cmd} web enable" >&2

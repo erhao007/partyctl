@@ -16,6 +16,7 @@ import (
 type Report struct {
 	CoreRunning  bool
 	CorePID      int
+	CorePIDs     []int
 	RunMode      string // systemd, detached, or empty when stopped
 	CoreVersion  string
 	Profile      string
@@ -73,20 +74,28 @@ func Collect() (Report, error) {
 		rep.CoreVersion = "未安装"
 	}
 
-	work := config.WorkDir()
+	cores := ListOurCores()
 	if pid, active := systemdCore(); active {
 		rep.CoreRunning = true
 		rep.RunMode = "systemd"
 		rep.CorePID = pid
-		if rep.CorePID <= 0 {
-			if p, ok := findCorePID(rep.CoreBinary, work); ok {
-				rep.CorePID = p
-			}
-		}
-	} else if p, ok := findCorePID(rep.CoreBinary, work); ok {
+	} else if len(cores) > 0 {
 		rep.CoreRunning = true
 		rep.RunMode = "detached"
-		rep.CorePID = p
+		rep.CorePID = cores[0].PID
+	}
+	if len(cores) > 0 {
+		rep.CoreRunning = true
+		rep.CorePIDs = make([]int, len(cores))
+		for i, c := range cores {
+			rep.CorePIDs[i] = c.PID
+		}
+		if rep.CorePID <= 0 {
+			rep.CorePID = cores[0].PID
+		}
+		if rep.RunMode == "" {
+			rep.RunMode = "detached"
+		}
 	}
 	if pid, ok := findWebPID(); ok {
 		rep.WebRunning = true
@@ -103,8 +112,12 @@ func FormatStatus(r Report) string {
 	} else {
 		fmt.Fprintf(&b, "核心: 未运行\n")
 	}
-	if r.CoreRunning && r.CorePID > 0 {
-		fmt.Fprintf(&b, "pid: %d\n", r.CorePID)
+	pids := r.CorePIDs
+	if len(pids) == 0 && r.CorePID > 0 {
+		pids = []int{r.CorePID}
+	}
+	if r.CoreRunning && len(pids) > 0 {
+		fmt.Fprintf(&b, "pid: %s\n", joinPIDs(pids))
 	} else {
 		fmt.Fprintf(&b, "pid: -\n")
 	}

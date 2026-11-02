@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/partyctl/partyctl/internal/config"
@@ -67,39 +66,35 @@ func systemctl(args ...string) error {
 }
 
 func Start(foreground bool) error {
-	// Refresh work/config.yaml on every start so a missing or outdated runtime config is rewritten.
-	if _, err := config.GenerateAndValidate(); err != nil {
-		return err
-	}
-	if err := EnsurePortsFree(); err != nil {
-		return err
-	}
-	if foreground || !userSystemdEnabled() {
+	if foreground {
+		if err := withCoreLock(func() error {
+			if err := rejectIfRunning(); err != nil {
+				return err
+			}
+			if _, err := config.GenerateAndValidate(); err != nil {
+				return err
+			}
+			return EnsurePortsFree()
+		}); err != nil {
+			return err
+		}
 		return runForeground()
 	}
-	if err := WriteUnit(); err != nil {
-		return err
-	}
-	_ = systemctl("daemon-reload")
-	return systemctl("start", unitName)
+	return withCoreLock(func() error { return startLocked(false) })
 }
 
 func Stop() error {
-	if userSystemdEnabled() {
-		if err := systemctl("stop", unitName); err == nil {
-			return nil
-		}
-	}
-	return stopByPIDFileOrPkill()
+	return withCoreLock(stopLocked)
 }
 
 // StartBackground 启动内核并立即返回，不会占住当前终端。
 // 有用户级 systemd 时交给它管理，否则脱离终端在后台运行。
 func StartBackground() error {
-	if !userSystemdEnabled() {
-		return StartDetached()
+	err := Start(false)
+	if IsAlreadyRunning(err) {
+		return nil
 	}
-	return Start(false)
+	return err
 }
 
 // RestartBackground 停止内核后再用 StartBackground 拉起。
@@ -134,43 +129,15 @@ func runForeground() error {
 	return cmd.Run()
 }
 
-func stopByPIDFileOrPkill() error {
-	bin := config.CoreBinaryPath()
-	cmd := exec.Command("pkill", "-f", bin+".*-d "+config.WorkDir())
-	_ = cmd.Run()
-	return nil
-}
-
 // StartDetached starts mihomo in background without systemd (fallback).
+// 若本配置目录已有内核在跑，则不再启动第二个。
 func StartDetached() error {
-	// Same refresh as Start: missing or outdated work/config.yaml is rewritten before launch.
-	if _, err := config.GenerateAndValidate(); err != nil {
-		return err
-	}
-	if err := EnsurePortsFree(); err != nil {
-		return err
-	}
-	bin := config.CoreBinaryPath()
-	cmd := exec.Command(bin, "-d", config.WorkDir())
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	fmt.Printf("started mihomo pid=%d (detached)\n", cmd.Process.Pid)
-	_ = cmd.Process.Release()
-	return nil
+	return withCoreLock(func() error { return startLocked(true) })
 }
 
 func HasSystemdUser() bool { return hasSystemdUser() }
 
 // IsRunning reports whether mihomo for the partyctl workdir appears running.
 func IsRunning() bool {
-	bin := config.CoreBinaryPath()
-	out, err := exec.Command("pgrep", "-f", bin+".*-d "+config.WorkDir()).CombinedOutput()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(out)) != ""
+	return len(ListOurCores()) > 0
 }
