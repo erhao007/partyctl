@@ -255,6 +255,68 @@ func TestWebWithoutSubscriptionThenStart(t *testing.T) {
 	}
 }
 
+func TestProxiesWhenCoreDown(t *testing.T) {
+	t.Setenv("PARTYCTL_FORCE_DETACH", "1")
+	t.Setenv("HOME", t.TempDir())
+	st := config.DefaultSettings()
+	st.Secret = "tok"
+	if err := config.SaveSettings(st); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New("127.0.0.1:0", st.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/proxies", nil)
+	req.Header.Set("Authorization", "Bearer "+st.Secret)
+	rr := httptest.NewRecorder()
+	srv.mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusServiceUnavailable || !bytes.Contains(rr.Body.Bytes(), []byte("内核未运行，请先启动")) {
+		t.Fatalf("proxies: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestFirstSubStartsCore(t *testing.T) {
+	t.Setenv("PARTYCTL_FORCE_DETACH", "1")
+	t.Setenv("HOME", t.TempDir())
+	st := config.DefaultSettings()
+	st.Secret = "tok"
+	if err := config.SaveSettings(st); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(config.CoreBinaryPath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nexit 0\n"
+	if err := os.WriteFile(config.CoreBinaryPath(), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("proxies:\n  - name: node-a\n    type: http\n    server: 127.0.0.1\n    port: 9\nproxy-groups:\n  - name: PROXY\n    type: select\n    proxies: [node-a, DIRECT]\nrules:\n  - MATCH,PROXY\n"))
+	}))
+	t.Cleanup(upstream.Close)
+	srv, err := New("127.0.0.1:0", st.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"name": "mysub", "url": upstream.URL})
+	req := httptest.NewRequest(http.MethodPost, "/api/subs", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+st.Secret)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	srv.mux.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("add: %d %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["started"] != true {
+		t.Fatalf("expected core start: %#v", resp)
+	}
+}
+
 func TestParseUserinfo(t *testing.T) {
 	ui := parseUserinfo("upload=1; download=2; total=10; expire=1893456000")
 	if ui["used"] != int64(3) {

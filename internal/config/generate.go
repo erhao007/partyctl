@@ -73,6 +73,8 @@ func Generate() (string, error) {
 
 // ForceBaseSettings applies partyctl-controlled fields onto the generated config.
 func ForceBaseSettings(profile map[string]any, s Settings) {
+	// mihomo 已删除该字段，留在运行配置里只会打出警告。
+	delete(profile, "global-client-fingerprint")
 	profile["mixed-port"] = s.MixedPort
 	profile["external-controller"] = s.ExternalController
 	profile["secret"] = s.Secret

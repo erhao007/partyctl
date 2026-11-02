@@ -119,7 +119,7 @@ partyctl tun on
 - 默认绑定 `127.0.0.1`；绑定非回环地址时会在 stderr 打印警告
 - 登录页 + `Authorization: Bearer <token>` / Cookie；token 默认等于控制器 `secret`
 - 功能：状态与启停、模式、订阅（添加、启用、更新、删除，含 subscription-userinfo 流量/到期解析）、覆盖编辑、节点选择与测速、实时流量与日志（SSE 代理内核）
-- 没有当前订阅时页面仍可打开。第一次添加订阅会自动启用；已有订阅时添加不会擅自切换。内核未安装或未选订阅时，点「启动」会提示原因
+- 没有当前订阅时页面仍可打开。第一次添加订阅会自动启用，并尝试启动内核；已有订阅时添加不会擅自切换。内核未运行时，节点页提示先启动，而不会把控制器的 HTML 当成 JSON。
 
 主要 API（均需鉴权，除 `POST /api/login`）：
 
@@ -144,6 +144,7 @@ partyctl tun on
 | `generate` | 生成配置并校验（`start` 也会自动执行） |
 | `start/stop/restart/status` | 生命周期；`status` 汇总内核、Web 与路径；`start --with-web` 会再后台拉起一份 Web |
 | `web [--listen]` / `web enable` / `web lan on\|off` / `web url` / `web token` | 前台启动 / 安装并自启 / 局域网访问开关 / 打印地址 / 打印登录令牌 |
+| `port` / `port set --mixed --controller` | 查看或修改 mixed-port 与外部控制器。9090/7890 被占用时 `start` 会拒绝启动并提示占用进程 |
 | `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 

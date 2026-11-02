@@ -351,7 +351,25 @@ func (s *Server) handleAddSub(w http.ResponseWriter, r *http.Request) {
 		}
 		activated = true
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "name": body.Name, "activated": activated})
+	started := false
+	warning := ""
+	// 第一份订阅启用后把内核拉起来，节点页才有策略组可读。启动失败不影响订阅已保存。
+	if activated {
+		var startErr error
+		if service.IsRunning() {
+			startErr = service.RestartBackground()
+		} else {
+			startErr = service.StartBackground()
+		}
+		if startErr != nil {
+			warning = "订阅已启用，但启动内核失败: " + startErr.Error()
+		} else {
+			started = true
+		}
+	}
+	writeJSON(w, 200, map[string]any{
+		"ok": true, "name": body.Name, "activated": activated, "started": started, "warning": warning,
+	})
 }
 
 func (s *Server) handleUpdateSub(w http.ResponseWriter, r *http.Request) {
@@ -543,6 +561,10 @@ func sanitizeName(name string) string {
 }
 
 func (s *Server) handleProxies(w http.ResponseWriter, r *http.Request) {
+	if !service.IsRunning() {
+		writeErr(w, http.StatusServiceUnavailable, "内核未运行，请先启动")
+		return
+	}
 	c, err := client.New()
 	if err != nil {
 		writeErr(w, 500, err.Error())

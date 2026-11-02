@@ -114,14 +114,23 @@ function connectLogs() {
   };
 }
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function loadProxies() {
   const box = $('#groups');
   box.innerHTML = '<p class="muted">加载中…</p>';
   try {
+    const st = await api('/api/status');
+    if (!st.running) {
+      box.innerHTML = '<p class="muted">内核未运行，请先点右上角「启动」。</p>';
+      return;
+    }
     const data = await api('/api/proxies');
     const pm = data.proxies || {};
     const groups = Object.entries(pm).filter(([,v]) => v && Array.isArray(v.all));
-    if (!groups.length) { box.innerHTML = '<p class="muted">无策略组（内核未运行？）</p>'; return; }
+    if (!groups.length) { box.innerHTML = '<p class="muted">没有策略组。请确认订阅里有 proxy-groups。</p>'; return; }
     box.innerHTML = '';
     for (const [name, g] of groups.sort((a,b)=>a[0].localeCompare(b[0]))) {
       const el = document.createElement('div');
@@ -162,7 +171,12 @@ async function loadProxies() {
       finally { btn.disabled = false; btn.textContent = '测速'; }
     });
   } catch (e) {
-    box.innerHTML = `<p class="error">${e.message}</p>`;
+    const msg = e.message || '加载失败';
+    if (msg.includes('内核未运行')) {
+      box.innerHTML = '<p class="muted">内核未运行，请先点右上角「启动」。</p>';
+      return;
+    }
+    box.innerHTML = `<p class="error">${esc(msg)}</p>`;
   }
 }
 

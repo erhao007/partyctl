@@ -71,6 +71,9 @@ func Start(foreground bool) error {
 	if _, err := config.GenerateAndValidate(); err != nil {
 		return err
 	}
+	if err := EnsurePortsFree(); err != nil {
+		return err
+	}
 	if foreground || !userSystemdEnabled() {
 		return runForeground()
 	}
@@ -142,6 +145,9 @@ func stopByPIDFileOrPkill() error {
 func StartDetached() error {
 	// Same refresh as Start: missing or outdated work/config.yaml is rewritten before launch.
 	if _, err := config.GenerateAndValidate(); err != nil {
+		return err
+	}
+	if err := EnsurePortsFree(); err != nil {
 		return err
 	}
 	bin := config.CoreBinaryPath()

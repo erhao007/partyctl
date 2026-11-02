@@ -62,7 +62,8 @@ func TestGeneratePipeline(t *testing.T) {
 				"proxies": []any{"DIRECT", "DIRECT-NODE"},
 			},
 		},
-		"rules": []any{"MATCH,PROXY"},
+		"rules":                     []any{"MATCH,PROXY"},
+		"global-client-fingerprint": "chrome",
 	}
 	raw, _ := yaml.Marshal(profile)
 	if err := os.WriteFile(ProfilePath("local"), raw, 0o644); err != nil {
@@ -111,6 +112,9 @@ func TestGeneratePipeline(t *testing.T) {
 	}
 	if geox["geosite"] != "https://mirror.test.example/geox/download/latest/geosite.dat" {
 		t.Fatalf("geosite: %#v", geox["geosite"])
+	}
+	if _, ok := out["global-client-fingerprint"]; ok {
+		t.Fatalf("removed field still present: %#v", out["global-client-fingerprint"])
 	}
 }
 
