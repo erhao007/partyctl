@@ -36,6 +36,8 @@ Environment:
   PARTYCTL_NO_START   设为 1/true/yes/on 时等同于 --no-start
                       要加在执行脚本的 sh 上，例如：
                       curl -fsSL .../install.sh | PARTYCTL_NO_START=1 sh
+  PARTYCTL_MIRROR     内核与 Geo 文件镜像，默认 https://get.251819788.xyz
+                      off 表示内核只从 GitHub 下载。同样要加在 sh 上
 EOF
 }
 
@@ -289,10 +291,11 @@ fi
 
 setup_warn=0
 echo "正在检查 mihomo 内核…"
-if ! "$dest" core install --if-missing; then
+core_mirror="${PARTYCTL_MIRROR:-https://get.251819788.xyz}"
+if ! "$dest" core install --if-missing --mirror "$core_mirror"; then
 	echo "警告: 内核没有安装成功。partyctl 程序本身已经装好，已有配置不会被改动。" >&2
 	echo "请稍后重试: ${partyctl_cmd} core install" >&2
-	echo "常见原因是暂时访问不了 GitHub。Web 管理界面仍会继续启动，你可以先打开页面。" >&2
+	echo "镜像和 GitHub 都连不上时内核不会就绪。Web 管理界面仍会继续启动，你可以先打开页面。" >&2
 	setup_warn=1
 fi
 

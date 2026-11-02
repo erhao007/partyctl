@@ -37,6 +37,7 @@ func TestForceBaseSettings(t *testing.T) {
 func TestGeneratePipeline(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("PARTYCTL_MIRROR", "https://mirror.test.example")
 
 	if err := EnsureDirs(); err != nil {
 		t.Fatal(err)
@@ -56,8 +57,8 @@ func TestGeneratePipeline(t *testing.T) {
 		},
 		"proxy-groups": []any{
 			map[string]any{
-				"name": "PROXY",
-				"type": "select",
+				"name":    "PROXY",
+				"type":    "select",
 				"proxies": []any{"DIRECT", "DIRECT-NODE"},
 			},
 		},
@@ -100,5 +101,80 @@ func TestGeneratePipeline(t *testing.T) {
 	}
 	if rules[0] != "DOMAIN-SUFFIX,forced.example,DIRECT" {
 		t.Fatalf("prepended rule missing: %#v", rules)
+	}
+	geox, ok := out["geox-url"].(map[string]any)
+	if !ok {
+		t.Fatalf("geox-url: %#v", out["geox-url"])
+	}
+	if geox["geoip"] != "https://mirror.test.example/geox/download/latest/geoip.dat" {
+		t.Fatalf("geoip: %#v", geox["geoip"])
+	}
+	if geox["geosite"] != "https://mirror.test.example/geox/download/latest/geosite.dat" {
+		t.Fatalf("geosite: %#v", geox["geosite"])
+	}
+}
+
+func TestGenerateKeepsProfileGeoxAndCanDisableMirror(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("PARTYCTL_MIRROR", "https://mirror.test.example")
+	if err := EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	s := DefaultSettings()
+	s.Secret = "testsecret"
+	s.CurrentProfile = "local"
+	if err := SaveSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	profile := map[string]any{
+		"geox-url": map[string]any{"geoip": "https://example.test/geoip.dat"},
+		"rules":    []any{"MATCH,DIRECT"},
+	}
+	raw, _ := yaml.Marshal(profile)
+	if err := os.WriteFile(ProfilePath("local"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := yaml.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	geox := out["geox-url"].(map[string]any)
+	if geox["geoip"] != "https://example.test/geoip.dat" {
+		t.Fatalf("profile geox replaced: %#v", geox)
+	}
+
+	t.Setenv("PARTYCTL_MIRROR", "off")
+	s.CurrentProfile = "plain"
+	if err := SaveSettings(s); err != nil {
+		t.Fatal(err)
+	}
+	plain := map[string]any{"rules": []any{"MATCH,DIRECT"}}
+	raw, _ = yaml.Marshal(plain)
+	if err := os.WriteFile(ProfilePath("plain"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path, err = Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = map[string]any{}
+	if err := yaml.Unmarshal(data, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["geox-url"]; ok {
+		t.Fatalf("mirror off still injected geox: %#v", out["geox-url"])
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/partyctl/partyctl/internal/core"
+	"github.com/partyctl/partyctl/internal/mirror"
 	"github.com/spf13/cobra"
 )
 
@@ -15,10 +16,11 @@ var coreCmd = &cobra.Command{
 
 var coreInstallVersion string
 var coreInstallIfMissing bool
+var coreInstallMirror string
 
 var coreInstallCmd = &cobra.Command{
 	Use:   "install",
-	Short: "从 GitHub 下载并安装 mihomo（linux amd64/arm64 .gz）",
+	Short: "下载并安装 mihomo（默认经镜像，失败回退 GitHub）",
 	Run: func(cmd *cobra.Command, args []string) {
 		out := cmd.OutOrStdout()
 		if coreInstallIfMissing {
@@ -33,7 +35,11 @@ var coreInstallCmd = &cobra.Command{
 				return
 			}
 		}
-		tag, err := core.Install(coreInstallVersion)
+		base := mirror.Base()
+		if cmd.Flags().Changed("mirror") {
+			base = mirror.Normalize(coreInstallMirror)
+		}
+		tag, err := core.InstallWith(coreInstallVersion, base)
 		fatal(err)
 		fmt.Fprintf(out, "installed mihomo %s -> ~/.local/share/partyctl/mihomo\n", tag)
 		ver, err := core.Version()
@@ -56,5 +62,6 @@ var coreVersionCmd = &cobra.Command{
 func init() {
 	coreInstallCmd.Flags().StringVar(&coreInstallVersion, "version", "", "release tag（默认 latest）")
 	coreInstallCmd.Flags().BoolVar(&coreInstallIfMissing, "if-missing", false, "内核已能运行时跳过下载")
+	coreInstallCmd.Flags().StringVar(&coreInstallMirror, "mirror", "", "内核镜像原点（默认 $PARTYCTL_MIRROR 或 https://get.251819788.xyz；off 表示只从 GitHub 下载）")
 	coreCmd.AddCommand(coreInstallCmd, coreVersionCmd)
 }

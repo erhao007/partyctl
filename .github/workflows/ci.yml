@@ -27,3 +27,6 @@ jobs:
 
       - name: Build
         run: go build -o partyctl .
+
+      - name: Worker tests
+        run: node --test cloudflare/worker.test.mjs

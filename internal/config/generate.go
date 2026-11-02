@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/partyctl/partyctl/internal/merge"
+	"github.com/partyctl/partyctl/internal/mirror"
 	"gopkg.in/yaml.v3"
 )
 
@@ -104,6 +105,23 @@ func ForceBaseSettings(profile map[string]any, s Settings) {
 			profile["tun"] = map[string]any{"enable": false}
 		}
 	}
+	applyMirrorGeox(profile)
+}
+
+// applyMirrorGeox 在订阅没有自带 geox-url 时，把 Geo 文件指到镜像，避免内核再去访问 GitHub。
+func applyMirrorGeox(profile map[string]any) {
+	if _, ok := profile["geox-url"]; ok {
+		return
+	}
+	urls := mirror.GeoxURLs(mirror.Base())
+	if urls == nil {
+		return
+	}
+	raw := make(map[string]any, len(urls))
+	for k, v := range urls {
+		raw[k] = v
+	}
+	profile["geox-url"] = raw
 }
 
 // Validate runs `mihomo -t -d <workdir>`.

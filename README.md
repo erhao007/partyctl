@@ -39,8 +39,9 @@ partyctl web enable
 安装或查看内核：
 
 ```bash
-partyctl core install              # 下载最新内核
+partyctl core install              # 经镜像下载最新内核，失败再试 GitHub
 partyctl core install --if-missing # 已有可运行内核时跳过
+partyctl core install --mirror off # 只从 GitHub 下载
 partyctl core version
 ```
 
@@ -133,7 +134,7 @@ partyctl tun on
 
 | 命令 | 说明 |
 |------|------|
-| `core install [--version] [--if-missing]` / `core version` | 下载安装 / 已有则跳过 / 查看内核 |
+| `core install [--version] [--if-missing] [--mirror]` / `core version` | 经镜像下载安装（失败回退 GitHub）/ 已有则跳过 / 查看内核 |
 | `sub add/update/use/list/rm` | 订阅管理 |
 | `override add/list/rm` | 覆盖管理 |
 | `generate` | 生成配置并校验（`start` 也会自动执行） |
@@ -194,7 +195,20 @@ arm64 把文件名中的 `amd64` 换成 `arm64`。`PARTYCTL_VERSION` 可指定�
 
 ## Cloudflare 镜像
 
-`cloudflare/` 是一个 Worker，已配置自定义域名 `get.251819788.xyz`（`workers.dev` 仍开启）。`GET /` 与 `GET /install.sh` 拉取最新 Release 里的 `install.sh`（没有则用 main 上的 raw 文件），并把默认 `PARTYCTL_BASE_URL` 改写为 `https://<请求主机>`。`GET /latest/download/<file>` 与 `GET /download/<tag>/<file>` 流式代理 GitHub Release 资源（跟随重定向），并带上缓存头。
+`cloudflare/` 是一个 Worker，已配置自定义域名 `get.251819788.xyz`（`workers.dev` 仍开启）。`GET /` 与 `GET /install.sh` 拉取最新 Release 里的 `install.sh`（没有则用 main 上的 raw 文件），并把默认 `PARTYCTL_BASE_URL` 和 `PARTYCTL_MIRROR` 改写为 `https://<请求主机>`。`GET /latest/download/<file>` 与 `GET /download/<tag>/<file>` 流式代理 partyctl 的 GitHub Release 资源。
+
+内核和 Geo 文件也走同一个域名，只允许这两个上游，不能拿来代理任意地址：
+
+| 路径 | 上游 |
+|------|------|
+| `GET /mihomo/releases/latest` | `api.github.com/repos/MetaCubeX/mihomo/releases/latest`（响应里的下载地址改写到本镜像） |
+| `GET /mihomo/releases/tags/<v标签>` | 对应 tag 的 release JSON |
+| `GET /mihomo/download/<v标签>/<文件>` | `github.com/MetaCubeX/mihomo/releases/download/...` |
+| `GET /geox/download/<latest 或 v标签>/<文件>` | `MetaCubeX/meta-rules-dat` 里固定的 `geoip.dat`、`geosite.dat`、`geoip.metadb`、`GeoLite2-ASN.mmdb` |
+
+`partyctl core install` 默认请求 `https://get.251819788.xyz`（可用 `PARTYCTL_MIRROR` 或 `--mirror` 覆盖，`off` 表示只走 GitHub）。镜像失败会再试 GitHub。生成配置时，如果订阅没有自己的 `geox-url`，会写成上面的 `/geox/download/latest/...`。重定向只跟随 `github.com`、`api.github.com` 和 `*.githubusercontent.com`。
+
+修改 `cloudflare/worker.js` 之后要在 `cloudflare/` 里重新执行 `npx wrangler deploy`，已发布的二进制要等下一个版本才会改走这些路径。
 
 部署时把 API 令牌放在环境变量 `CLOUDFLARE_API_TOKEN` 里，不要写入仓库：
 
