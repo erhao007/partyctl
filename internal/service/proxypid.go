@@ -4,6 +4,8 @@ package service
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/partyctl/partyctl/internal/procproxy"
 )
@@ -65,6 +67,7 @@ func ProxyClear() (string, error) {
 	if err := procproxy.RequireRoot(); err != nil {
 		return "", err
 	}
+	_ = StopAppWatcher()
 	msg, err := procproxy.Clear()
 	if err != nil {
 		return "", err
@@ -122,6 +125,21 @@ func ensureProcCoreLocked() (restarted, freshly bool, err error) {
 		return false, false, err
 	}
 	return false, true, nil
+}
+
+func skipProtected() func(int) bool {
+	var mu sync.Mutex
+	var set map[int]bool
+	var at time.Time
+	return func(pid int) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		if set == nil || time.Since(at) > time.Second {
+			set = protectedPIDs()
+			at = time.Now()
+		}
+		return set[pid]
+	}
 }
 
 func protectedPIDs() map[int]bool {

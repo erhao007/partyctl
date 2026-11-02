@@ -109,6 +109,7 @@ func ForceBaseSettings(profile map[string]any, s Settings) {
 		}
 	}
 	applyMirrorGeox(profile)
+	ensureSelection(profile)
 	// 仅在按进程代理开启时补 tproxy / routing-mark / DNS，不改 tun 开关。
 	procproxy.ApplyRuntime(profile)
 }

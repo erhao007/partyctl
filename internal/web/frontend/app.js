@@ -133,12 +133,22 @@ async function loadProxies() {
     const groups = Object.entries(pm).filter(([,v]) => v && Array.isArray(v.all));
     if (!groups.length) { box.innerHTML = '<p class="muted">没有策略组。请确认订阅里有 proxy-groups。</p>'; return; }
     box.innerHTML = '';
-    for (const [name, g] of groups.sort((a,b)=>a[0].localeCompare(b[0]))) {
+    const rank = (g) => /selector/i.test(g.type || '') ? 0 : (/urltest|fallback/i.test(g.type || '') ? 1 : 2);
+    groups.sort((a, b) => rank(a[1]) - rank(b[1]) || a[0].localeCompare(b[0]));
+    for (const [name, g] of groups) {
       const el = document.createElement('div');
       el.className = 'group';
-      el.innerHTML = `<div class="group-head"><strong>${name}</strong>
-        <div class="row"><span class="muted">${g.type||''} · 当前 ${g.now||'—'}</span>
-        <button class="btn btn-ghost" data-delay-group="${name}">测速</button></div></div>
+      const fixed = typeof g.fixed === 'string' ? g.fixed : '';
+      const manual = /selector/i.test(g.type || '');
+      const auto = /urltest|fallback/i.test(g.type || '');
+      let tag = manual ? '手动选择' : (g.type || '');
+      if (auto && fixed) tag += ' · 已固定 ' + fixed;
+      else if (auto) tag += ' · 自动';
+      const unfix = auto && fixed ? `<button class="btn btn-ghost" data-unfix="${esc(name)}">恢复自动</button>` : '';
+      el.innerHTML = `<div class="group-head"><strong>${esc(name)}</strong>
+        <div class="row"><span class="muted">${esc(tag)} · 当前 ${esc(g.now||'—')}</span>
+        ${unfix}
+        <button class="btn btn-ghost" data-delay-group="${esc(name)}">测速</button></div></div>
         <div class="nodes"></div>`;
       const nodes = $('.nodes', el);
       for (const n of g.all) {
@@ -153,6 +163,12 @@ async function loadProxies() {
       }
       box.appendChild(el);
     }
+    $$('[data-unfix]').forEach(btn => btn.onclick = async () => {
+      try {
+        await api('/api/proxies/' + encodeURIComponent(btn.dataset.unfix), { method: 'DELETE' });
+        await loadProxies();
+      } catch (e) { alert(e.message); }
+    });
     $$('[data-delay-group]').forEach(btn => btn.onclick = async () => {
       const g = btn.dataset.delayGroup;
       btn.disabled = true; btn.textContent = '测速中…';
@@ -244,7 +260,17 @@ async function loadProcProxy() {
     const s = await api('/api/proc-proxy');
     const n = (s.procs || []).length;
     box.textContent = (s.enabled ? '已开启' : '未开启') + (s.rules ? '，规则已安装' : '，规则未安装') + '，' + n + ' 个进程';
-    list.innerHTML = (s.procs || []).map(p => `<li>${p.pid} ${esc(p.cmd || '')} <button type="button" class="btn btn-ghost" data-rm="${p.pid}">撤销</button></li>`).join('') || '<li class="muted">当前没有接管任何进程</li>';
+    const apps = $('#proc-app-list');
+    list.innerHTML = (s.procs || []).map(p => `<li>${p.pid} ${esc(p.cmd || '')} <button type="button" class="btn btn-ghost" data-rm="${p.pid}">撤销</button></li>`).join('') || '<li class="muted">当前没有按 PID 接管的进程</li>';
+    if (apps) {
+      apps.innerHTML = (s.apps || []).map(a => `<li>${esc(a.match)} <button type="button" class="btn btn-ghost" data-rm-app="${esc(a.match)}">取消</button></li>`).join('') || '<li class="muted">当前没有按应用接管</li>';
+      $$('[data-rm-app]', apps).forEach(b => b.onclick = async () => {
+        try {
+          await api('/api/proc-proxy/app?match=' + encodeURIComponent(b.dataset.rmApp), { method: 'DELETE' });
+          await loadProcProxy();
+        } catch (err) { alert(err.message); }
+      });
+    }
     $$('[data-rm]', list).forEach(b => b.onclick = async () => {
       try {
         await api('/api/proc-proxy?pid=' + encodeURIComponent(b.dataset.rm), { method: 'DELETE' });
@@ -339,6 +365,53 @@ $('#proc-proxy-add').onsubmit = async (e) => {
     await loadProcProxy();
   } catch (err) { alert(err.message); }
 };
+const appForm = $('#proc-app-add');
+if (appForm) appForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const match = new FormData(e.target).get('match');
+  try {
+    await api('/api/proc-proxy/app', { method: 'POST', body: JSON.stringify({ match }) });
+    e.target.reset();
+    await loadProcProxy();
+  } catch (err) { alert(err.message); }
+};
+const diagBtn = $('#run-diag');
+if (diagBtn) diagBtn.onclick = async () => {
+  const view = $('#diag-view');
+  diagBtn.disabled = true;
+  if (view) view.textContent = '正在诊断，请稍候…';
+  try {
+    const rep = await api('/api/diag', { method: 'POST', body: '{}' });
+    if (view) view.textContent = formatDiag(rep);
+  } catch (err) {
+    if (view) view.textContent = err.message;
+  } finally { diagBtn.disabled = false; }
+};
+function formatDiag(rep) {
+  const lines = [];
+  lines.push((rep.core_running ? '内核运行中' : '内核未运行') + '  mixed-port ' + rep.mixed_port + (rep.mixed_listening ? ' 监听中' : ' 未监听'));
+  lines.push('控制器: ' + (rep.controller_ok ? '正常' : (rep.controller_error || '异常')));
+  lines.push('DNS: ' + (rep.dns || '-'));
+  (rep.groups || []).forEach(g => {
+    lines.push((g.manual ? '手动 ' : '') + g.name + ' [' + g.type + '] 当前 ' + (g.now || '-') + (g.fixed ? ' 已固定 ' + g.fixed : ''));
+  });
+  (rep.probes || []).forEach(p => {
+    lines.push('');
+    lines.push(p.url);
+    lines.push('  直连 ' + attemptText(p.direct));
+    lines.push('  代理 ' + attemptText(p.proxy) + (p.node ? '  节点 ' + p.node : '') + (p.rule ? '  规则 ' + p.rule : ''));
+    lines.push('  ' + (p.advice || ''));
+  });
+  lines.push('');
+  lines.push(rep.summary || '');
+  return lines.join('\n');
+}
+function attemptText(a) {
+  if (!a) return '-';
+  if (a.error && !a.status) return '失败 ' + a.latency_ms + 'ms ' + a.error;
+  return (a.ok ? '成功' : '失败') + ' HTTP ' + (a.status || '-') + ' ' + a.latency_ms + 'ms';
+}
+
 $('#proc-proxy-clear').onclick = async () => {
   if (!confirm('清理全部按进程代理规则？被接管的进程会恢复直连。')) return;
   try {

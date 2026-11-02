@@ -130,7 +130,12 @@ func startLocked(detach bool) error {
 		}
 	}
 	if procproxy.Enabled() {
-		return procproxy.WaitAndArm()
+		if err := procproxy.WaitAndArm(); err != nil {
+			return err
+		}
+	}
+	if procproxy.HasApps() {
+		_, _ = EnsureAppWatcher()
 	}
 	return nil
 }

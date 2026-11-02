@@ -67,6 +67,8 @@ func (s *Server) routes() {
 	api.HandleFunc("DELETE /api/overrides/{name}", s.handleDeleteOverride)
 	api.HandleFunc("GET /api/proxies", s.handleProxies)
 	api.HandleFunc("PUT /api/proxies/{group}", s.handleSelectProxy)
+	api.HandleFunc("DELETE /api/proxies/{group}", s.handleUnfixProxy)
+	api.HandleFunc("POST /api/diag", s.handleDiag)
 	api.HandleFunc("GET /api/delay/{name}", s.handleDelay)
 	api.HandleFunc("GET /api/traffic", s.handleTrafficSSE)
 	api.HandleFunc("GET /api/logs", s.handleLogsSSE)
@@ -75,6 +77,8 @@ func (s *Server) routes() {
 	api.HandleFunc("POST /api/proc-proxy", s.handleProcProxyAdd)
 	api.HandleFunc("DELETE /api/proc-proxy", s.handleProcProxyRemove)
 	api.HandleFunc("POST /api/proc-proxy/clear", s.handleProcProxyClear)
+	api.HandleFunc("POST /api/proc-proxy/app", s.handleProcProxyAppAdd)
+	api.HandleFunc("DELETE /api/proc-proxy/app", s.handleProcProxyAppRemove)
 	api.HandleFunc("POST /api/login", s.handleLogin)
 
 	s.mux.Handle("/api/", s.authMiddleware(api))

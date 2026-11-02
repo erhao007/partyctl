@@ -149,6 +149,43 @@ func (c *Client) SelectProxy(group, name string) error {
 	return err
 }
 
+// UnfixProxy 解除 url-test/fallback 上的固定选择，让它恢复自动。
+func (c *Client) UnfixProxy(group string) error {
+	_, err := c.do(http.MethodDelete, "/proxies/"+url.PathEscape(group), nil, nil)
+	return err
+}
+
+// Connections 读取内核当前连接，用来判断一次访问走了哪个节点和规则。
+func (c *Client) Connections() (map[string]any, error) {
+	data, err := c.do(http.MethodGet, "/connections", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FixedProxy 返回 url-test/fallback 被固定的节点名。未固定时为空。
+func FixedProxy(info map[string]any) string {
+	if info == nil {
+		return ""
+	}
+	s, _ := info["fixed"].(string)
+	return strings.TrimSpace(s)
+}
+
+// GroupType 返回策略组类型，例如 Selector、URLTest、Fallback。
+func GroupType(info map[string]any) string {
+	if info == nil {
+		return ""
+	}
+	s, _ := info["type"].(string)
+	return s
+}
+
 func (c *Client) ProxyDelay(name, testURL string, timeout int) (map[string]any, error) {
 	q := url.Values{}
 	q.Set("url", testURL)

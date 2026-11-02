@@ -49,6 +49,8 @@
             <h2>状态</h2>
             <dl id="status-dl" class="kv"></dl>
             <p id="status-hint" class="muted tip"></p>
+            <button id="run-diag" class="btn" type="button">代理诊断</button>
+            <pre id="diag-view" class="log-view"></pre>
           </div>
           <div class="card">
             <h2>模式</h2>
@@ -128,9 +130,14 @@
           <ul id="proc-proxy-list"></ul>
           <form id="proc-proxy-add" class="row">
             <input name="pid" placeholder="PID" inputmode="numeric" />
-            <button class="btn" type="submit">接管</button>
+            <button class="btn" type="submit">按 PID 接管</button>
             <button class="btn btn-ghost" id="proc-proxy-clear" type="button">清理全部规则</button>
           </form>
+          <form id="proc-app-add" class="row">
+            <input name="match" placeholder="程序名或路径，如 firefox、/usr/bin/curl" />
+            <button class="btn" type="submit">按应用接管</button>
+          </form>
+          <ul id="proc-app-list"></ul>
         </div>
       </section>
 

@@ -90,7 +90,69 @@ var proxyClearCmd = &cobra.Command{
 	},
 }
 
+var proxyAppCmd = &cobra.Command{
+	Use:   "app",
+	Short: "按程序名或可执行路径持久接管",
+	Long: `应用重启后 pid 会变。按名称或路径记下规则后，新启动的匹配进程会自动进入接管组。
+需要 root。有 systemd 时会安装开机自启服务。
+
+示例:
+  sudo partyctl proxy app add firefox
+  sudo partyctl proxy app add /usr/bin/curl
+  sudo partyctl proxy app list
+  sudo partyctl proxy app rm firefox`,
+}
+
+var proxyAppAddCmd = &cobra.Command{
+	Use:   "add <名称|路径>",
+	Short: "增加一条按应用接管",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.ProxyAppAdd(args[0])
+		if msg != "" {
+			fmt.Fprint(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
+var proxyAppRmCmd = &cobra.Command{
+	Use:   "rm <名称|路径>",
+	Short: "取消一条按应用接管",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.ProxyAppRemove(args[0])
+		if msg != "" {
+			fmt.Fprint(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
+var proxyAppListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "查看按应用接管",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		msg, err := service.ProxyAppList()
+		if msg != "" {
+			fmt.Fprint(cmd.OutOrStdout(), msg)
+		}
+		fatal(err)
+	},
+}
+
+var proxyWatchCmd = &cobra.Command{
+	Use:   "watch",
+	Short: "前台运行按应用接管监视",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		fatal(service.WatchApps())
+	},
+}
+
 func init() {
 	proxyPidCmd.AddCommand(proxyPidListCmd, proxyPidRmCmd)
-	proxyCmd.AddCommand(proxyPidCmd, proxyClearCmd)
+	proxyAppCmd.AddCommand(proxyAppAddCmd, proxyAppRmCmd, proxyAppListCmd)
+	proxyCmd.AddCommand(proxyPidCmd, proxyAppCmd, proxyClearCmd, proxyWatchCmd)
 }

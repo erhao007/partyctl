@@ -28,6 +28,13 @@ type Proc struct {
 	RootPID  int    `json:"root_pid"`
 	Original string `json:"original"`
 	Cmd      string `json:"cmd"`
+	Via      string `json:"via,omitempty"` // app:<匹配串>，空表示按 pid 接管
+}
+
+// App 是按程序名或可执行路径持久接管的一条规则。
+type App struct {
+	Match string `json:"match"`
+	Path  string `json:"path,omitempty"`
 }
 
 // State 保存在配置目录，重启后据此恢复或清理。
@@ -36,6 +43,7 @@ type State struct {
 	DNSPort   int    `json:"dns_port,omitempty"`
 	RouteMark int    `json:"route_mark,omitempty"`
 	Procs     []Proc `json:"procs"`
+	Apps      []App  `json:"apps,omitempty"`
 }
 
 var mu sync.Mutex
@@ -113,5 +121,13 @@ func Disable() error {
 	st := load()
 	st.Enabled = false
 	st.Procs = nil
+	st.Apps = nil
 	return save(st)
+}
+
+// HasApps 报告是否配置了按应用接管。
+func HasApps() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return len(load().Apps) > 0
 }

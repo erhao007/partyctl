@@ -60,6 +60,32 @@ func (s *Server) handleProcProxyClear(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": msg, "state": procproxy.Snapshot()})
 }
 
+func (s *Server) handleProcProxyAppAdd(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Match string `json:"match"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Match) == "" {
+		writeErr(w, http.StatusBadRequest, "请填写程序名或路径")
+		return
+	}
+	msg, err := service.ProxyAppAdd(body.Match)
+	if err != nil {
+		writeProxyErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": msg, "state": procproxy.Snapshot()})
+}
+
+func (s *Server) handleProcProxyAppRemove(w http.ResponseWriter, r *http.Request) {
+	match := r.URL.Query().Get("match")
+	msg, err := service.ProxyAppRemove(match)
+	if err != nil {
+		writeProxyErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": msg, "state": procproxy.Snapshot()})
+}
+
 func writeProxyErr(w http.ResponseWriter, err error) {
 	msg := err.Error()
 	code := http.StatusInternalServerError

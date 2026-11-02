@@ -14,6 +14,7 @@ type Snap struct {
 	TProxyPort int    `json:"tproxy_port"`
 	RouteMark  int    `json:"route_mark"`
 	Procs      []Proc `json:"procs"`
+	Apps       []App  `json:"apps"`
 }
 
 // Describe 用一行中文说明当前状态，供 partyctl status 使用。
@@ -23,6 +24,9 @@ func Describe() string {
 		return "关"
 	}
 	n := len(s.Procs)
+	if len(s.Apps) > 0 && s.Rules {
+		return fmt.Sprintf("开，%d 个应用，%d 个进程", len(s.Apps), n)
+	}
 	if s.Rules && n > 0 {
 		return fmt.Sprintf("开，%d 个进程", n)
 	}
@@ -60,6 +64,7 @@ func Snapshot() Snap {
 		TProxyPort: TProxyPort,
 		RouteMark:  nonzero(st.RouteMark, RouteMark),
 		Procs:      live,
+		Apps:       st.Apps,
 	}
 }
 
@@ -74,6 +79,18 @@ func (s Snap) Text() string {
 		b.WriteString("按进程代理: 开，规则未安装（相关进程目前直连）\n")
 	}
 	fmt.Fprintf(&b, "tproxy 端口: %d    DNS 端口: %d    排除标记: 0x%x\n", s.TProxyPort, s.DNSPort, s.RouteMark)
+	if len(s.Apps) == 0 {
+		b.WriteString("按应用接管: 无\n")
+	} else {
+		b.WriteString("按应用接管:\n")
+		for _, a := range s.Apps {
+			if a.Path != "" && a.Path != a.Match {
+				fmt.Fprintf(&b, "  %s  (%s)\n", a.Match, a.Path)
+			} else {
+				fmt.Fprintf(&b, "  %s\n", a.Match)
+			}
+		}
+	}
 	if len(s.Procs) == 0 {
 		b.WriteString("当前没有接管任何进程。\n")
 		return b.String()
@@ -216,7 +233,7 @@ func Release(pid int) (string, error) {
 	if err := save(st); err != nil {
 		return "", err
 	}
-	if cgroupEmpty() {
+	if cgroupEmpty() && len(st.Apps) == 0 {
 		if err := disarmLocked(); err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -225,8 +242,10 @@ func Release(pid int) (string, error) {
 		return "", fmt.Errorf("已尝试撤销 pid %d，但有失败:\n%s", pid, strings.Join(errs, "\n"))
 	}
 	extra := ""
-	if cgroupEmpty() {
+	if cgroupEmpty() && len(st.Apps) == 0 {
 		extra = "接管组已空，规则已撤掉，这些进程恢复直连。"
+	} else if len(st.Apps) > 0 {
+		extra = "仍有按应用接管，规则保留。"
 	}
 	return fmt.Sprintf("已撤销 pid %d，迁回 %d 个进程。%s", pid, restored, extra), nil
 }
@@ -255,6 +274,7 @@ func Clear() (string, error) {
 	}
 	st.Enabled = false
 	st.Procs = nil
+	st.Apps = nil
 	if err := save(st); err != nil {
 		return "", err
 	}

@@ -118,7 +118,7 @@ func Heal(coreRunning bool) error {
 	if !coreRunning || !st.Enabled || !listenersReady(st.DNSPort) {
 		return disarmLocked()
 	}
-	if !hasLive(st) && cgroupEmpty() {
+	if !hasLive(st) && cgroupEmpty() && len(st.Apps) == 0 {
 		return nil
 	}
 	if RulesPresent() {

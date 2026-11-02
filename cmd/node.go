@@ -53,7 +53,14 @@ var nodeListCmd = &cobra.Command{
 				strings.EqualFold(typ, "Fallback") || strings.EqualFold(typ, "LoadBalance") ||
 				strings.EqualFold(typ, "Relay") {
 				now, _ := m["now"].(string)
-				names = append(names, fmt.Sprintf("%-24s %-12s now=%s", name, typ, now))
+				line := fmt.Sprintf("%-24s %-12s now=%s", name, typ, now)
+				if fixed := client.FixedProxy(m); fixed != "" && !strings.EqualFold(typ, "Selector") {
+					line += " 已固定=" + fixed
+				}
+				if strings.EqualFold(typ, "Selector") {
+					line += " 手动"
+				}
+				names = append(names, line)
 			}
 		}
 		sort.Strings(names)
@@ -72,6 +79,46 @@ var nodeSelectCmd = &cobra.Command{
 		fatal(err)
 		fatal(c.SelectProxy(args[0], args[1]))
 		fmt.Printf("%s -> %s\n", args[0], args[1])
+		if proxies, err := c.Proxies(); err == nil {
+			if pm, _ := proxies["proxies"].(map[string]any); pm != nil {
+				if info, _ := pm[args[0]].(map[string]any); info != nil {
+					typ := client.GroupType(info)
+					if strings.EqualFold(typ, "URLTest") || strings.EqualFold(typ, "Fallback") {
+						fmt.Printf("已固定。自动测速不再改掉这个节点。恢复自动: partyctl node auto %s\n", args[0])
+					}
+				}
+			}
+		}
+	},
+}
+
+var nodeAutoCmd = &cobra.Command{
+	Use:   "auto <group>",
+	Short: "解除 url-test/fallback 的固定选择，恢复自动",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		c, err := client.New()
+		fatal(err)
+		proxies, err := c.Proxies()
+		fatal(err)
+		pm, _ := proxies["proxies"].(map[string]any)
+		if pm == nil {
+			fatal(fmt.Errorf("控制器没有返回策略组"))
+		}
+		info, _ := pm[args[0]].(map[string]any)
+		if info == nil {
+			fatal(fmt.Errorf("找不到策略组 %q", args[0]))
+		}
+		typ := client.GroupType(info)
+		if strings.EqualFold(typ, "Selector") {
+			fatal(fmt.Errorf("「%s」是手动选择组，没有自动切换。更换节点请用 partyctl node select", args[0]))
+		}
+		if client.FixedProxy(info) == "" {
+			fmt.Printf("%s 当前没有固定节点。\n", args[0])
+			return
+		}
+		fatal(c.UnfixProxy(args[0]))
+		fmt.Printf("已恢复自动: %s\n", args[0])
 	},
 }
 
@@ -113,5 +160,5 @@ var nodeDelayCmd = &cobra.Command{
 }
 
 func init() {
-	nodeCmd.AddCommand(nodeListCmd, nodeSelectCmd, nodeDelayCmd)
+	nodeCmd.AddCommand(nodeListCmd, nodeSelectCmd, nodeAutoCmd, nodeDelayCmd)
 }

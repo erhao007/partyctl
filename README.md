@@ -107,7 +107,11 @@ partyctl web --listen 127.0.0.1:9800  # 前台运行，不安装服务
 ```bash
 partyctl mode rule
 partyctl node list
+partyctl node list
 partyctl node select PROXY '节点名'
+partyctl node auto PROXY          # 解除 url-test/fallback 的固定，恢复自动
+partyctl diag
+partyctl diag --url https://example.com
 partyctl override add /tmp/ov.yaml
 partyctl proxy env
 partyctl tun on
@@ -121,9 +125,19 @@ partyctl tun on
 sudo partyctl proxy pid 1234          # 接管已有进程，以及它之后创建的子进程
 sudo partyctl proxy pid list
 sudo partyctl proxy pid rm 1234
+sudo partyctl proxy app add firefox   # 按程序名，重启后新 pid 也会接管
+sudo partyctl proxy app add /usr/bin/curl
+sudo partyctl proxy app list
+sudo partyctl proxy app rm firefox
 sudo partyctl run -- curl -I https://example.com
 sudo partyctl proxy clear             # 迁回进程并删掉全部规则
 ```
+
+`proxy app add` 会记下名称或路径。监视进程优先使用内核的 proc connector，在程序 exec 时把它移入接管组；当前内核不投递进程事件时改为每 40ms 扫描。有 systemd 时安装 `partyctl-proxy-watch.service`，开机和内核重启后继续生效。没有 systemd 时只在本次开机后台运行，重启后需要再执行一次 `proxy app add`。
+
+订阅如果只有 url-test/fallback、没有 select 组，生成配置时会加上「手动选择」，并把原来的自动组放在第一项，默认仍走自动。在自动组里手动点一个节点会固定（`fixed`），Web 和 `node list` 显示「已固定」，`node auto` 或页面上的「恢复自动」对应 `DELETE /proxies/<组>`。`profile.store-selected` 会打开，选择写在内核缓存里，重启后保留。
+
+`partyctl diag` 检查内核、mixed-port、控制器、策略组和 DNS，再对比直连与代理访问 Google、GitHub、api.github.com、YouTube。失败时给出中文建议。概览页有同样的按钮。
 
 用 `sudo` 时请保持和内核相同的 `HOME`（直接用 root 运行，或 `sudo -H`）。Web「设置」页也有同样的入口；Web 进程本身不是 root 时会提示需要 root。
 
@@ -153,7 +167,9 @@ sudo partyctl proxy clear             # 迁回进程并删掉全部规则
 | GET/PUT | `/api/proxies…` | 节点 |
 | GET | `/api/delay/{name}` | 延迟 |
 | GET | `/api/traffic` `/api/logs` | SSE |
-| GET/POST/DELETE | `/api/proc-proxy` | 查看、接管、撤销按进程代理；`POST /api/proc-proxy/clear` 清理全部规则 |
+| GET/POST/DELETE | `/api/proc-proxy` | 按 pid 接管；`POST /api/proc-proxy/app` 按应用接管；`POST /api/proc-proxy/clear` 清理 |
+| DELETE | `/api/proxies/{group}` | 解除 url-test/fallback 的固定选择 |
+| POST | `/api/diag` | 代理诊断 |
 
 ## 命令一览
 
@@ -167,9 +183,10 @@ sudo partyctl proxy clear             # 迁回进程并删掉全部规则
 | `web [--listen]` / `web enable` / `web lan on\|off` / `web url` / `web token` | 前台启动 / 安装并自启 / 局域网访问开关 / 打印地址 / 打印登录令牌 |
 | `port` / `port set --mixed --controller` | 查看或修改 mixed-port 与外部控制器。9090/7890 被其他程序占用时 `start` 会拒绝启动并提示占用进程 |
 | `core reconcile` | 升级后把已经在跑的 partyctl 内核收成一个并重新启动。`start` 发现已在运行则提示，不再起第二个 |
-| `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理。`proxy on/off/env` 仍是 GNOME 系统代理 |
-| `proxy pid <pid>...` / `proxy pid list` / `proxy pid rm <pid>` / `proxy clear` | 按进程接管或撤销。需要 root，不影响全局 TUN 和系统代理 |
+| `mode` / `node` / `log` / `proxy` / `tun` | 控制与系统代理。`proxy on/off/env` 仍是 GNOME 系统代理。`node select` 在 url-test/fallback 上会固定节点，`node auto` 恢复自动 |
+| `proxy pid …` / `proxy app add\|rm\|list` / `proxy clear` | 按 pid 或按程序名/路径接管。需要 root，不影响全局 TUN 和系统代理 |
 | `run -- <命令>` | 在按进程代理里启动程序 |
+| `diag [--url URL]` | 检查内核、端口、节点、DNS，并对比直连和代理访问常用网站 |
 | `version` | 显示 partyctl 版本（发布包为 git 标签，本地构建为 `dev`） |
 
 ## 本地最小配置示例

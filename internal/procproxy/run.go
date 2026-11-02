@@ -108,7 +108,7 @@ func finishRun(pid int, original string) {
 		st = upsert(st, Proc{PID: m, RootPID: pid, Original: original, Cmd: readCmd(m)})
 	}
 	_ = save(st)
-	if cgroupEmpty() {
+	if cgroupEmpty() && len(st.Apps) == 0 {
 		_ = disarmLocked()
 	}
 }
