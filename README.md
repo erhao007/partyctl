@@ -131,6 +131,24 @@ go vet ./...
 go build -o partyctl .
 ```
 
+## 发布与下载
+
+推送 `v*` 标签后，GitHub Actions 会构建 linux/amd64 与 linux/arm64 静态二进制，打成含 README 的 tar.gz，附上 SHA256 校验和，并发布到 [GitHub Releases](https://github.com/erhao007/partyctl/releases)。
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+在 Releases 页面下载对应架构的压缩包和 `SHA256SUMS`，校验后安装：
+
+```bash
+sha256sum -c SHA256SUMS
+tar -xzf partyctl-v0.1.0-linux-amd64.tar.gz
+sudo install -m 755 partyctl-v0.1.0-linux-amd64/partyctl /usr/local/bin/partyctl
+```
+
+arm64 把文件名中的 `amd64` 换成 `arm64`。
+
 ## 许可
 
 MVP 示例代码，按需使用。mihomo / Clash Party 遵循各自上游许可。

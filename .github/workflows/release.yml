@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build archives
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          # No version variable exists in this module, so ldflags only strip the binary.
+          ldflags="-s -w"
+          for arch in amd64 arm64; do
+            name="partyctl-${version}-linux-${arch}"
+            staging="dist/${name}"
+            mkdir -p "${staging}"
+            CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" \
+              go build -trimpath -ldflags "${ldflags}" -o "${staging}/partyctl" .
+            cp README.md "${staging}/README.md"
+            tar -C dist -czf "dist/${name}.tar.gz" "${name}"
+            rm -rf "${staging}"
+          done
+          (
+            cd dist
+            sha256sum partyctl-*.tar.gz > SHA256SUMS
+          )
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          generate_release_notes: true
